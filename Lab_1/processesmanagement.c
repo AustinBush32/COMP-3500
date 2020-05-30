@@ -165,15 +165,14 @@ void CPUScheduler(Identifier whichPolicy) {
   }
 }
 
-/***********************************************************************\                                               
- * Input : None                                                         *                                               
+/***********************************************************************\
+ * Input : None                                                         *
  * Output: Pointer to the process based on First Come First Serve (FCFS)*
- * Function: Returns process control block based on FCFS                *                                                \***********************************************************************/
+ * Function: Returns process control block based on FCFS                *
+\***********************************************************************/
 ProcessControlBlock *FCFS_Scheduler() {
   /* Select Process based on FCFS */
-  // Implement code for FCFS
-  ProcessControlBlock *selectedProcess = (ProcessControlBlock *) NULL;
-
+  ProcessControlBlock *selectedProcess = DequeueProcess(READYQUEUE);
   return(selectedProcess);
 }
 
@@ -186,11 +185,19 @@ ProcessControlBlock *FCFS_Scheduler() {
 \***********************************************************************/
 ProcessControlBlock *SJF_Scheduler() {
   /* Select Process with Shortest Remaining Time*/
-  ProcessControlBlock *selectedProcess = (ProcessControlBlock *) NULL;
-  
-  // Implement code for SJF
- 
-  return(selectedProcess);
+  ProcessControlBlock *shortestProcess = DequeueProcess(READYQUEUE);
+  ProcessControlBlock *currentProcess = DequeueProcess(READYQUEUE);
+  while (currentProcess) {
+    if (currentProcess->TotalJobDuration < shortestProcess->TotalJobDuration) {
+      EnqueueProcess(READYQUEUE, shortestProcess);
+      shortestProcess = currentProcess;
+      currentProcess = currentProcess->next;
+    }
+    else {
+      currentProcess = currentProcess->next;
+    }
+  }
+  return(shortestProcess);
 }
 
 
