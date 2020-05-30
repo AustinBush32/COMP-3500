@@ -172,7 +172,7 @@ void CPUScheduler(Identifier whichPolicy) {
 \***********************************************************************/
 ProcessControlBlock *FCFS_Scheduler() {
   /* Select Process based on FCFS */
-  ProcessControlBlock *selectedProcess = DequeueProcess(READYQUEUE);
+  ProcessControlBlock *selectedProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
   return(selectedProcess);
 }
 
@@ -185,8 +185,8 @@ ProcessControlBlock *FCFS_Scheduler() {
 \***********************************************************************/
 ProcessControlBlock *SJF_Scheduler() {
   /* Select Process with Shortest Remaining Time*/
-  ProcessControlBlock *shortestProcess = DequeueProcess(READYQUEUE);
-  ProcessControlBlock *currentProcess = DequeueProcess(READYQUEUE);
+  ProcessControlBlock *shortestProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
+  ProcessControlBlock *currentProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
   while (currentProcess) {
     if (currentProcess->TotalJobDuration < shortestProcess->TotalJobDuration) {
       EnqueueProcess(READYQUEUE, shortestProcess);
@@ -208,7 +208,7 @@ ProcessControlBlock *SJF_Scheduler() {
  \***********************************************************************/
 ProcessControlBlock *RR_Scheduler() {
   /* Select Process based on RR*/
-  ProcessControlBlock *selectedProcess = (ProcessControlBlock *) NULL;
+  ProcessControlBlock *selectedProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
 
   // Implement code for RR                                                                                             
 
