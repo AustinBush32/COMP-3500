@@ -186,17 +186,35 @@ ProcessControlBlock *FCFS_Scheduler() {
 ProcessControlBlock *SJF_Scheduler() {
   /* Select Process with Shortest Remaining Time*/
   ProcessControlBlock *shortestProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
-  ProcessControlBlock *currentProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
-  while (currentProcess) {
-    if (currentProcess->TotalJobDuration < shortestProcess->TotalJobDuration) {
-      EnqueueProcess(READYQUEUE, shortestProcess);
-      shortestProcess = currentProcess;
-      currentProcess = currentProcess->next;
-    }
-    else {
-      currentProcess = currentProcess->next;
+  if (shortestProcess) {
+    ProcessControlBlock *currentProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
+    // save originalProcess for later
+    ProcessControlBlock *originalProcess = shortestProcess;
+    // while currentProcess
+    while (currentProcess) {
+      // if currentProcess is less than shortestProcess enqueue shortestProcess and assign currentProcess to shortestProcess
+      if (currentProcess->TotalJobDuration < shortestProcess->TotalJobDuration) {
+        EnqueueProcess(READYQUEUE, shortestProcess);
+        shortestProcess = currentProcess;
+      }
+      // if currentProcess is greater than shortestProcess enqueue it
+      else {
+        EnqueueProcess(READYQUEUE, currentProcess);
+      }
+
+      // check to see if you have compared all processes against shortestProcess and break
+      if (originalProcess->ProcessID == currentProcess->ProcessID) {
+        // since current process has been dequeued if it is not the shortest process enqueue it.
+        if (shortestProcess->ProcessID != currentProcess->ProcessID) {
+          EnqueueProcess(READYQUEUE, currentProcess);
+        }
+        break;
+      }
+      // get next currentProcess
+      currentProcess = DequeueProcess(READYQUEUE);
     }
   }
+  
   return(shortestProcess);
 }
 
@@ -224,7 +242,63 @@ ProcessControlBlock *RR_Scheduler() {
 \***********************************************************************/
 void Dispatcher() {
   double start;
-  //
+  ProcessControlBlock *selectedProcess = DequeueProcess(RUNNINGQUEUE);
+
+  if (selectedProcess) {
+
+    // if process has not been on CPU yet.
+    if (selectedProcess->TimeInCpu == 0) {
+      selectedProcess->StartCpuTime = Now();
+      NumberofJobs[CBT]++;
+      NumberofJobs[RT]++;
+      SumMetrics[RT] += (Now() - selectedProcess->JobArrivalTime);
+    }
+
+    // if jod is done.
+    if (selectedProcess->TimeInCpu >= selectedProcess->TotalJobDuration) {
+      selectedProcess->JobExitTime = Now();
+      selectedProcess->state = DONE;
+
+      // update metrics
+      SumMetrics[TAT] += (selectedProcess->JobExitTime - selectedProcess->JobArrivalTime);
+      SumMetrics[WT] += (selectedProcess->JobExitTime - selectedProcess->JobArrivalTime - selectedProcess->TimeInWaitQueue
+         - selectedProcess->TimeInCpu - selectedProcess->TimeInJobQueue);
+      
+      // since job is done enqueue it to the exit queue
+      EnqueueProcess(EXITQUEUE, selectedProcess);
+
+      // update NumberofJobs
+      NumberofJobs[THGT]++;
+      NumberofJobs[WT]++;
+    }
+    else {
+      // if RR set CpuBurstTime to the quantum
+      if (PolicyNumber == RR) {
+        selectedProcess->CpuBurstTime = Quantum;
+      }
+
+      // if remaining time is less then the burst time set the burst time to the remaining time
+      if (selectedProcess->RemainingCpuBurstTime < selectedProcess->CpuBurstTime) {
+        selectedProcess->CpuBurstTime = selectedProcess->RemainingCpuBurstTime;
+      }
+
+      // if burst time is greater than the job duration left over then set that
+      if (selectedProcess->TotalJobDuration - selectedProcess->TimeInCpu < selectedProcess->CpuBurstTime) {
+        selectedProcess->CpuBurstTime = selectedProcess->TotalJobDuration - selectedProcess->TimeInCpu;
+      }
+      
+      // put the process on the cpu
+      OnCPU(selectedProcess, selectedProcess->CpuBurstTime);
+      // update TimeInCpu
+      selectedProcess->TimeInCpu += selectedProcess->CpuBurstTime;
+      // update RemainingCpuBurstTime
+      selectedProcess->RemainingCpuBurstTime = (selectedProcess->CpuBurstTime - selectedProcess->RemainingCpuBurstTime);
+      // put process on the running queue
+      EnqueueProcess(RUNNINGQUEUE, selectedProcess);
+      // update metrics
+      SumMetrics[CBT] += selectedProcess->CpuBurstTime;
+    }
+  }
 }
 
 /***********************************************************************\
@@ -261,8 +335,8 @@ void BookKeeping(void){
   printf("Policy Number = %d, Quantum = %.6f   Show = %d\n", PolicyNumber, Quantum, Show);
   printf("Number of Completed Processes = %d\n", NumberofJobs[THGT]);
   printf("ATAT=%f   ART=%f  CBT = %f  T=%f AWT=%f\n", 
-	 SumMetrics[TAT], SumMetrics[RT], SumMetrics[CBT], 
-	 NumberofJobs[THGT]/Now(), SumMetrics[WT]);
+	 SumMetrics[TAT]/NumberofJobs[THGT], SumMetrics[RT]/NumberofJobs[RT], SumMetrics[CBT]/end, 
+	 NumberofJobs[THGT]/end, SumMetrics[WT]/NumberofJobs[WT]);
 
   exit(0);
 }
