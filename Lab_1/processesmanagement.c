@@ -206,11 +206,9 @@ ProcessControlBlock *SJF_Scheduler() {
         // Put the current process back on the ready queue
         EnqueueProcess(READYQUEUE, currentProcess);
       }
-      } while (currentProcess);
-
     }
 
-  }
+  } while (currentProcess);
   
   return(shortestProcess);
 }
