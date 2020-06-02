@@ -232,12 +232,13 @@ ProcessControlBlock *RR_Scheduler() {
 
   // Get Process that just ran
   ProcessControlBlock *runningProcess = (ProcessControlBlock *) DequeueProcess(RUNNINGQUEUE);
+  
+  // Set the state of the process that just ran
+  runningProcess->state = READY;
 
   if (runningProcess) {
     // Put process that ran back in ready queue
     EnqueueProcess(READYQUEUE, runningProcess);
-    // Remove process that ran from the running queue
-    DequeueProcess(RUNNINGQUEUE);
     // Put next process to run in the running queue
     EnqueueProcess(RUNNINGQUEUE, selectedProcess);
   }
