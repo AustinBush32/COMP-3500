@@ -185,34 +185,31 @@ ProcessControlBlock *FCFS_Scheduler() {
 \***********************************************************************/
 ProcessControlBlock *SJF_Scheduler() {
   /* Select Process with Shortest Remaining Time*/
+
+  // Get the first process out of the ready queue to begin comparing job durations
   ProcessControlBlock *shortestProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
-  if (shortestProcess) {
-    ProcessControlBlock *currentProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
-    // save originalProcess for later
-    ProcessControlBlock *originalProcess = shortestProcess;
-    // while currentProcess
-    while (currentProcess) {
-      // if currentProcess is less than shortestProcess enqueue shortestProcess and assign currentProcess to shortestProcess
+  
+  // Loop through the entire ready queue to find the process with the shortest TotalJobDuration
+  do {
+    // Get the second process out of the ready queue and point to it with currentProcess
+    ProcessControlBlock *currentProcess = DequeueProcess(READYQUEUE);
+
+    if (currentProcess) {
+      // If the current process' job duration is shorter than the current shortest job, update the shortestJobTime variable
       if (currentProcess->TotalJobDuration < shortestProcess->TotalJobDuration) {
+        // Put the process with the larger job duration back in the queue
         EnqueueProcess(READYQUEUE, shortestProcess);
+        // Update shortestProcess pointer to the process with the shorter job duration
         shortestProcess = currentProcess;
       }
-      // if currentProcess is greater than shortestProcess enqueue it
       else {
+        // Put the current process back on the ready queue
         EnqueueProcess(READYQUEUE, currentProcess);
       }
+      } while (currentProcess);
 
-      // check to see if you have compared all processes against shortestProcess and break
-      if (originalProcess->ProcessID == currentProcess->ProcessID) {
-        // since current process has been dequeued if it is not the shortest process enqueue it.
-        if (shortestProcess->ProcessID != currentProcess->ProcessID) {
-          EnqueueProcess(READYQUEUE, currentProcess);
-        }
-        break;
-      }
-      // get next currentProcess
-      currentProcess = DequeueProcess(READYQUEUE);
     }
+
   }
   
   return(shortestProcess);
@@ -222,13 +219,25 @@ ProcessControlBlock *SJF_Scheduler() {
 /***********************************************************************\                                               
  * Input : None                                                         *                                               
  * Output: Pointer to the process based on Round Robin (RR)             *                                               
- * Function: Returns process control block based on RR                  *                                              \
+ * Function: Returns process control block based on RR                  *
  \***********************************************************************/
 ProcessControlBlock *RR_Scheduler() {
   /* Select Process based on RR*/
+
+  // Get process to run next
   ProcessControlBlock *selectedProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
 
-  // Implement code for RR                                                                                             
+  // Get Process that just ran
+  ProcessControlBlock *runningProcess = (ProcessControlBlock *) DequeueProcess(RUNNINGQUEUE);
+
+  if (runningProcess) {
+    // Put process that ran back in ready queue
+    EnqueueProcess(READYQUEUE, runningProcess);
+    // Remove process that ran from the running queue
+    DequeueProcess(RUNNINGQUEUE);
+    // Put next process to run in the running queue
+    EnqueueProcess(RUNNINGQUEUE, selectedProcess);
+  }
 
   return(selectedProcess);
 }
@@ -254,7 +263,7 @@ void Dispatcher() {
       SumMetrics[RT] += (Now() - selectedProcess->JobArrivalTime);
     }
 
-    // if jod is done.
+    // if job is done.
     if (selectedProcess->TimeInCpu >= selectedProcess->TotalJobDuration) {
       selectedProcess->JobExitTime = Now();
       selectedProcess->state = DONE;
@@ -317,7 +326,9 @@ void NewJobIn(ProcessControlBlock whichProcess){
 }
 
 
-/***********************************************************************\                                               * Input : None                                                         *                                                * Output: None                                                         *                
+/***********************************************************************\                                               
+* Input : None                                                         *                                                
+* Output: None                                                         *                
 * Function:                                                            *
 * 1) BookKeeping is called automatically when 250 arrived              *
 * 2) Computes and display metrics: average turnaround  time, throughput*
