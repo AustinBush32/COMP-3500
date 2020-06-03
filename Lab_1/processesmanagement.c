@@ -222,13 +222,25 @@ ProcessControlBlock *SJF_Scheduler() {
 /***********************************************************************\                                               
  * Input : None                                                         *                                               
  * Output: Pointer to the process based on Round Robin (RR)             *                                               
- * Function: Returns process control block based on RR                  *                                              \
+ * Function: Returns process control block based on RR                  *
  \***********************************************************************/
 ProcessControlBlock *RR_Scheduler() {
   /* Select Process based on RR*/
+
+  // Get process to run next
   ProcessControlBlock *selectedProcess = (ProcessControlBlock *) DequeueProcess(READYQUEUE);
 
-  // Implement code for RR                                                                                             
+  // Get Process that just ran
+  ProcessControlBlock *runningProcess = (ProcessControlBlock *) DequeueProcess(RUNNINGQUEUE);
+
+  if (runningProcess) {
+    // Put process that ran back in ready queue
+    EnqueueProcess(READYQUEUE, runningProcess);
+    // Remove process that ran from the running queue
+    DequeueProcess(RUNNINGQUEUE);
+    // Put next process to run in the running queue
+    EnqueueProcess(RUNNINGQUEUE, selectedProcess);
+  }
 
   return(selectedProcess);
 }
@@ -254,7 +266,7 @@ void Dispatcher() {
       SumMetrics[RT] += (Now() - selectedProcess->JobArrivalTime);
     }
 
-    // if jod is done.
+    // if job is done.
     if (selectedProcess->TimeInCpu >= selectedProcess->TotalJobDuration) {
       selectedProcess->JobExitTime = Now();
       selectedProcess->state = DONE;
@@ -317,7 +329,9 @@ void NewJobIn(ProcessControlBlock whichProcess){
 }
 
 
-/***********************************************************************\                                               * Input : None                                                         *                                                * Output: None                                                         *                
+/***********************************************************************\                                               
+* Input : None                                                         *                                                
+* Output: None                                                         *                
 * Function:                                                            *
 * 1) BookKeeping is called automatically when 250 arrived              *
 * 2) Computes and display metrics: average turnaround  time, throughput*
