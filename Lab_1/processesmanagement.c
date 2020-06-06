@@ -284,19 +284,19 @@ void Dispatcher() {
       NumberofJobs[WT]++;
     }
     else {
-      // if RR set CpuBurstTime to the quantum
+
+      // if RR set the CpuBurstTime to quantum or RemainingCpuBurstTime if it is less than quantum
       if (PolicyNumber == RR) {
-        selectedProcess->CpuBurstTime = Quantum;
-      }
-
-      // if remaining time is less then the burst time set the burst time to the remaining time
-      if (selectedProcess->RemainingCpuBurstTime < selectedProcess->CpuBurstTime) {
-        selectedProcess->CpuBurstTime = selectedProcess->RemainingCpuBurstTime;
-      }
-
-      // if burst time is greater than the job duration left over then set that
-      if (selectedProcess->TotalJobDuration - selectedProcess->TimeInCpu < selectedProcess->CpuBurstTime) {
-        selectedProcess->CpuBurstTime = selectedProcess->TotalJobDuration - selectedProcess->TimeInCpu;
+        if (selectedProcess->RemainingCpuBurstTime < Quantum) {
+          selectedProcess->CpuBurstTime = selectedProcess->RemainingCpuBurstTime;
+        } else {
+          selectedProcess->CpuBurstTime = Quantum;
+        }
+      } else {
+        // if RemainingCpuBurstTime is less than CpuBurstTime set it as CpuBurstTime
+        if (selectedProcess->RemainingCpuBurstTime < selectedProcess->CpuBurstTime) {
+          selectedProcess->CpuBurstTime = selectedProcess->RemainingCpuBurstTime;
+        }
       }
       
       // put the process on the cpu
@@ -304,7 +304,7 @@ void Dispatcher() {
       // update TimeInCpu
       selectedProcess->TimeInCpu += selectedProcess->CpuBurstTime;
       // update RemainingCpuBurstTime
-      selectedProcess->RemainingCpuBurstTime = (selectedProcess->CpuBurstTime - selectedProcess->RemainingCpuBurstTime);
+      selectedProcess->RemainingCpuBurstTime = (selectedProcess->RemainingCpuBurstTime - selectedProcess->CpuBurstTime);
       // put process on the running queue
       EnqueueProcess(RUNNINGQUEUE, selectedProcess);
       // update metrics
