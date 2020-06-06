@@ -254,21 +254,21 @@ ProcessControlBlock *RR_Scheduler() {
 \***********************************************************************/
 void Dispatcher() {
   double start;
-  ProcessControlBlock *selectedProcess = DequeueProcess(RUNNINGQUEUE);
+  ProcessControlBlock *selectedProcess = (ProcessControlBlock *) DequeueProcess(RUNNINGQUEUE);
 
   if (selectedProcess) {
-
+    double currentTime = Now();
     // if process has not been on CPU yet.
     if (selectedProcess->TimeInCpu == 0) {
-      selectedProcess->StartCpuTime = Now();
+      selectedProcess->StartCpuTime = currentTime;
       NumberofJobs[CBT]++;
       NumberofJobs[RT]++;
-      SumMetrics[RT] += (Now() - selectedProcess->JobArrivalTime);
+      SumMetrics[RT] += (currentTime - selectedProcess->JobArrivalTime);
     }
 
     // if job is done.
     if (selectedProcess->TimeInCpu >= selectedProcess->TotalJobDuration) {
-      selectedProcess->JobExitTime = Now();
+      selectedProcess->JobExitTime = currentTime;
       selectedProcess->state = DONE;
 
       // update metrics
@@ -339,7 +339,7 @@ void NewJobIn(ProcessControlBlock whichProcess){
 *     and CPU Utilization                                              *                                                     
 \***********************************************************************/
 void BookKeeping(void){
-  double end = Now(); // Total time for all processes to arrive
+  double endTime = Now(); // Total time for all processes to arrive
   Metric m;
 
   // Compute averages and final results
@@ -349,8 +349,8 @@ void BookKeeping(void){
   printf("Policy Number = %d, Quantum = %.6f   Show = %d\n", PolicyNumber, Quantum, Show);
   printf("Number of Completed Processes = %d\n", NumberofJobs[THGT]);
   printf("ATAT=%f   ART=%f  CBT = %f  T=%f AWT=%f\n", 
-	 SumMetrics[TAT]/NumberofJobs[THGT], SumMetrics[RT]/NumberofJobs[RT], SumMetrics[CBT]/end, 
-	 NumberofJobs[THGT]/end, SumMetrics[WT]/NumberofJobs[WT]);
+	 SumMetrics[TAT]/NumberofJobs[THGT], SumMetrics[RT]/NumberofJobs[RT], SumMetrics[CBT]/endTime, 
+	 NumberofJobs[THGT]/endTime, SumMetrics[WT]/NumberofJobs[WT]);
 
   exit(0);
 }
