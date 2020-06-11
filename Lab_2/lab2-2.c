@@ -83,50 +83,35 @@ int main(){
 
   if (pid == 0) {
     /* The child increments the counter by two's */
-    while(1) {
-      petersonptr->turn = true;
+
+    do {
+      petersonptr->turn = false;
       petersonptr->interested_0 = true;
-      while(petersonptr->turn && petersonptr->interested_1) {
-        if (*countptr < nloop) {
-          add_n(countptr,2);
-          printf("Child process -->> counter= %d\n",*countptr);
-        } else {
-          petersonptr->interested_0 = false;
-          close(petersonFile);
-          close(fd);
-          break;
-        }
+      if (!petersonptr->turn && petersonptr->interested_1);
+      else {
+        add_n(countptr,2);
+        printf("Child process -->> counter= %d\n",*countptr);
         petersonptr->interested_0 = false;
-        close(petersonFile);
-        close(fd);
       }
-      if (*countptr >= nloop) {
-        break;
-      }
-    }
+    } while (*countptr < nloop);
+    
+    close(petersonFile);
+    close(fd);
   } else {
     /* The parent increments the counter by twenty's */
-    while(1) {
-      petersonptr->turn = false;
+    do {
+      petersonptr->turn = true;
       petersonptr->interested_1 = true;
-      while(!petersonptr->turn && petersonptr->interested_0) {
-        if (*countptr < nloop) {
-          add_n(countptr,20);
-          printf("Parent process -->> counter = %d\n",*countptr);
-        } else {
-          petersonptr->interested_1 = false;
-          close(petersonFile);
-          close(fd);
-          break;
-        }
+      if (petersonptr->turn && petersonptr->interested_0);
+      else {
+        add_n(countptr,20);
+        printf("Child process -->> counter= %d\n",*countptr);
         petersonptr->interested_1 = false;
-        close(petersonFile);
-        close(fd);
       }
-      if (*countptr >= nloop) {
-        break;
-      }
-    }
+    } while (*countptr < nloop);
+    
+    close(petersonFile);
+    close(fd);
   }
 
 
