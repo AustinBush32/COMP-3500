@@ -83,10 +83,9 @@ int main(){
     do {
       *turnptr = 0;
       *interestptr0 = 1;
-      while (*interestptr0 && *turnptr == 0) {
-        add_n(countptr,2);
-        printf("Child process -->> counter= %d\n",*countptr);
-      }
+      while (*interestptr0 && *turnptr == 0);
+      add_n(countptr,2);
+      printf("Child process -->> counter= %d\n",*countptr);
       *interestptr0 = 0;
     } while (*countptr < nloop);
     close(fd);
@@ -99,10 +98,9 @@ int main(){
     do {
       *turnptr = 1;
       *interestptr1 = 1;
-      while (*interestptr1 && *turnptr == 1) {
-        add_n(countptr,20);
-        printf("Parent process -->> counter = %d\n",*countptr);
-      }
+      while (*interestptr1 && *turnptr == 1);
+      add_n(countptr,20);
+      printf("Parent process -->> counter = %d\n",*countptr);
       *interestptr1 = 0;
     } while (*countptr < nloop);
     close(fd);
