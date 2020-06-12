@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+// struct for petersons variables
 typedef struct PetersonVars {
   bool turn;
   bool interested_0;
@@ -28,6 +29,7 @@ void add_n(int *ptr, int increment){
   }
 }
 
+// initiate petersons variables
 void initPeterson(PetersonVars *vars) {
   vars->interested_0 = false;
   vars->interested_1 = false;
@@ -59,11 +61,15 @@ int main(){
   *countptr = 0;
   close(fd);
 
+  // pointer to petersons variables
   PetersonVars *petersonptr;
+  // file descriptor to the file "containing" petersons variables 
   int petersonFile;
   system("rm -f peterson");
+  // create a file which will "contain" my shared variable
   petersonFile = open("peterson",O_RDWR | O_CREAT);
   write(petersonFile,&zero,sizeof(PetersonVars));
+  // map my file to memory
   petersonptr = (PetersonVars *) mmap(NULL, sizeof(PetersonVars),PROT_READ | PROT_WRITE, MAP_SHARED, petersonFile,0);
 
   if (!petersonptr) {
@@ -84,6 +90,7 @@ int main(){
   if (pid == 0) {
     /* The child increments the counter by two's */
 
+    // use petersons solution for child process
     do {
       petersonptr->turn = false;
       petersonptr->interested_0 = true;
@@ -94,11 +101,12 @@ int main(){
         petersonptr->interested_0 = false;
       }
     } while (*countptr < nloop);
-    
     close(petersonFile);
     close(fd);
   } else {
     /* The parent increments the counter by twenty's */
+    
+    //use petersons solution for parent process
     do {
       petersonptr->turn = true;
       petersonptr->interested_1 = true;
@@ -109,7 +117,6 @@ int main(){
         petersonptr->interested_1 = false;
       }
     } while (*countptr < nloop);
-    
     close(petersonFile);
     close(fd);
   }
