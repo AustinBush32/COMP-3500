@@ -7,9 +7,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+
 // struct for petersons variables
 typedef struct PetersonVars {
-  bool turn;
+  int turn;
   bool interested_0;
   bool interested_1; 
 } PetersonVars;
@@ -91,37 +92,44 @@ int main(){
     /* The child increments the counter by two's */
 
     // use petersons solution for child process
-    do {
-      petersonptr->turn = false;
-      petersonptr->interested_0 = true;
-      if (!petersonptr->turn && petersonptr->interested_1);
-      else {
+
+  while(1){
+    petersonptr->interested_0 = true;
+    petersonptr->turn = 1;
+
+    while(petersonptr->interested_1 && (petersonptr->turn == 1));
+      if(*countptr < nloop) {
         add_n(countptr,2);
         printf("Child process -->> counter= %d\n",*countptr);
         petersonptr->interested_0 = false;
+        close(petersonFile);
+        close(fd);
+        if (*countptr > nloop) {
+          break;
+        }
       }
-    } while (*countptr < nloop);
-    close(petersonFile);
-    close(fd);
+  }
   } else {
     /* The parent increments the counter by twenty's */
     
     //use petersons solution for parent process
-    do {
-      petersonptr->turn = true;
+    while(1){
       petersonptr->interested_1 = true;
-      if (petersonptr->turn && petersonptr->interested_0);
-      else {
+      petersonptr->turn = 0;
+
+      while(petersonptr->interested_0 && (petersonptr->turn == 0));
+      if(*countptr < nloop) {
         add_n(countptr,20);
-        printf("Child process -->> counter= %d\n",*countptr);
+        printf("Parent process -->> counter= %d\n",*countptr);
         petersonptr->interested_1 = false;
+        close(petersonFile);
+        close(fd);
+        if (*countptr > nloop) {
+          break;
+        }
       }
-    } while (*countptr < nloop);
-    close(petersonFile);
-    close(fd);
+    }
   }
-
-
 }
 
 
