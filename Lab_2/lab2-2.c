@@ -1,10 +1,19 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+
+// struct for petersons variables
+typedef struct PetersonVars {
+  int turn;
+  bool interested_0;
+  bool interested_1; 
+} PetersonVars;
 
 int nloop = 50;
 
@@ -21,54 +30,55 @@ void add_n(int *ptr, int increment){
   }
 }
 
+// initiate petersons variables
+void initPeterson(PetersonVars *vars) {
+  vars->interested_0 = false;
+  vars->interested_1 = false;
+}
+
 int main(){
   int pid;        /* Process ID                     */
 
   int *countptr;  /* pointer to the counter         */
-  int *interestptr0;
-  int *interestptr1;
-  int *turnptr;
 
   int fd;     /* file descriptor to the file "containing" my counter */
-  int fdi0;
-  int fdi1;
-  int fdt;
   int zero = 0; /* a dummy variable containing 0 */
 
   system("rm -f counter");
-  system("rm -f interested0");
-  system("rm -f interested1");
-  system("rm -f turn");
 
   /* create a file which will "contain" my shared variable */
   fd = open("counter",O_RDWR | O_CREAT);
-  fdi0 = open("interested0", O_RDWR | O_CREAT);
-  fdi1 = open("interested1", O_RDWR | O_CREAT);
-  fdt = open("turn", O_RDWR | O_CREAT);
   write(fd,&zero,sizeof(int));
-  write(fdi0,&zero,sizeof(int));
-  write(fdi1,&zero,sizeof(int));
-  write(fdt,&zero,sizeof(int));
 
   /* map my file to memory */
   countptr = (int *) mmap(NULL, sizeof(int),PROT_READ | PROT_WRITE, MAP_SHARED, fd,0);
-  interestptr0 = (int *) mmap(NULL, sizeof(int),PROT_READ | PROT_WRITE, MAP_SHARED, fdi0,0);
-  interestptr1 = (int *) mmap(NULL, sizeof(int),PROT_READ | PROT_WRITE, MAP_SHARED, fdi1,0);
-  turnptr = (int *) mmap(NULL, sizeof(int),PROT_READ | PROT_WRITE, MAP_SHARED, fdt,0);
 
 
  
-  if (!countptr || !interestptr0 || !interestptr1 || !turnptr) {
+  if (!countptr) {
     printf("Mapping failed\n");
     exit(1);
   }
   *countptr = 0;
-
   close(fd);
-  close(fdi0);
-  close(fdi1);
-  close(fdt);
 
+  // pointer to petersons variables
+  PetersonVars *petersonptr;
+  // file descriptor to the file "containing" petersons variables 
+  int petersonFile;
+  system("rm -f peterson");
+  // create a file which will "contain" my shared variable
+  petersonFile = open("peterson",O_RDWR | O_CREAT);
+  write(petersonFile,&zero,sizeof(PetersonVars));
+  // map my file to memory
+  petersonptr = (PetersonVars *) mmap(NULL, sizeof(PetersonVars),PROT_READ | PROT_WRITE, MAP_SHARED, petersonFile,0);
+
+  if (!petersonptr) {
+    printf("Peterson Mapping failed\n");
+    exit(1);
+  }
+  initPeterson(petersonptr);
+  close(petersonFile);
 
   setbuf(stdout,NULL);
 
@@ -80,45 +90,44 @@ int main(){
 
   if (pid == 0) {
     /* The child increments the counter by two's */
-    do {
-      *turnptr = 0;
-      *interestptr0 = 1;
-      if (*interestptr1 == 1 && *turnptr == 0);
-      else {
+
+    // use petersons solution for child process
+
+  while(1){
+    petersonptr->interested_0 = true;
+    petersonptr->turn = 1;
+
+    while(petersonptr->interested_1 && (petersonptr->turn == 1));
+      if(*countptr < nloop) {
         add_n(countptr,2);
         printf("Child process -->> counter= %d\n",*countptr);
-        *interestptr0 = 0;
+        petersonptr->interested_0 = false;
+        close(petersonFile);
+        close(fd);
+        if (*countptr > nloop) {
+          break;
+        }
       }
-    } while (*countptr < nloop);
-    close(fd);
-    close(fdi0);
-    close(fdi1);
-    close(fdt);
   }
-  else {
+  } else {
     /* The parent increments the counter by twenty's */
-    do {
-      *turnptr = 1;
-      *interestptr1 = 1;
-      if (*interestptr0 == 1 && *turnptr == 1);
-      else {
+    
+    //use petersons solution for parent process
+    while(1){
+      petersonptr->interested_1 = true;
+      petersonptr->turn = 0;
+
+      while(petersonptr->interested_0 && (petersonptr->turn == 0));
+      if(*countptr < nloop) {
         add_n(countptr,20);
-        printf("Parent process -->> counter = %d\n",*countptr);
-        *interestptr1 = 0;
+        printf("Parent process -->> counter= %d\n",*countptr);
+        petersonptr->interested_1 = false;
+        close(petersonFile);
+        close(fd);
+        if (*countptr > nloop) {
+          break;
+        }
       }
-    } while (*countptr < nloop);
-    close(fd);
-    close(fdi0);
-    close(fdi1);
-    close(fdt);
+    }
   }
 }
-
-
-
-
-
-
-
-
-
