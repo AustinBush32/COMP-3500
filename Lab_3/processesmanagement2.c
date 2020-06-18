@@ -18,7 +18,8 @@
 *                             Global data types                               *
 \*****************************************************************************/
 
-typedef enum {TAT,RT,CBT,THGT,WT} Metric;
+typedef enum {TAT,RT,CBT,THGT,WT,WTJQ} Metric;
+typedef enum {INFINITE,OMAP,BESTFIT,WORSTFIT,PAGING} MemoryPolicy;
 
 
 /*****************************************************************************\
@@ -29,14 +30,25 @@ typedef enum {TAT,RT,CBT,THGT,WT} Metric;
 #define RR              3 
 
 
-#define MAXMETRICS      5 
+#define MAXMETRICS      6 
 
 
 
 /*****************************************************************************\
 *                            Global data structures                           *
 \*****************************************************************************/
+typedef struct MemoryBlock {
+  struct MemoryBlock *previous;
+	struct MemoryBlock *next;
+  Memory size;
+  Memory top;
+	ProcessControlBlock *process;
+} MemoryBlock;
 
+typedef struct MemoryBlockList {
+	MemoryBlock *Head;
+	MemoryBlock *Tail;
+} MemoryBlockList;
 
 
 
@@ -46,6 +58,12 @@ typedef enum {TAT,RT,CBT,THGT,WT} Metric;
 
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
+
+MemoryBlockList MemoryBlocks;
+const MemoryPolicy policy = PAGING;
+const int PageSize = 256;
+int NumberOfAvailablePages;
+int NumberOfRequestedPages;
 
 /*****************************************************************************\
 *                               Function prototypes                           *
@@ -60,6 +78,14 @@ void                 IO();
 void                 CPUScheduler(Identifier whichPolicy);
 ProcessControlBlock *SRTF();
 void                 Dispatcher();
+Flag                 omap (ProcessControlBlock *currentProcess);
+Flag                 paging (ProcessControlBlock *currentProcess);
+Flag                 bestfit (ProcessControlBlock *currentProcess);
+Flag                 worstfit (ProcessControlBlock *currentProcess);
+Flag				         removeBlock(MemoryBlock *memoryBlock);
+void                 push(MemoryBlock *MemoryBlock);
+void                 compactMemory();
+void                 PrintMemoryBlocks();
 
 /*****************************************************************************\
 * function: main()                                                            *
@@ -213,9 +239,30 @@ void Dispatcher() {
   
   if (processOnCPU->TimeInCpu >= processOnCPU-> TotalJobDuration) { // Process Complete
     printf(" >>>>>Process # %d complete, %d Processes Completed So Far <<<<<<\n",
-	   processOnCPU->ProcessID,NumberofJobs[THGT]);   
+	  processOnCPU->ProcessID,NumberofJobs[THGT]);   
     processOnCPU=DequeueProcess(RUNNINGQUEUE);
     EnqueueProcess(EXITQUEUE,processOnCPU);
+
+    if (policy == OMAP) {
+      AvailableMemory += processOnCPU->MemoryAllocated;
+      printf(" >> deallocated %u from %d, %u AvailableMemory\n", processOnCPU->MemoryAllocated, processOnCPU->ProcessID, AvailableMemory);
+      processOnCPU->MemoryAllocated = 0;
+    } else if (policy == BESTFIT || policy == WORSTFIT) {
+      // remove the process and free up the memory block
+      struct MemoryBlock *memoryBlock = MemoryBlocks.Head;
+      while(memoryBlock) {
+        if (memoryBlock->process && memoryBlock->process->ProcessID == processOnCPU->ProcessID) {
+          memoryBlock->process = NULL;
+          printf(" >> deallocated memory block from process %d\n", processOnCPU->ProcessID);
+          break;
+        }
+        memoryBlock = memoryBlock->next;
+      }
+    } else if (policy == PAGING) {
+      NumberOfRequestedPages = ceil((float)processOnCPU->MemoryRequested/PageSize);
+      printf(" >> deallocated %d pages from %d, %d frames available\n", NumberOfRequestedPages, processOnCPU->ProcessID, NumberOfAvailablePages);
+      NumberOfAvailablePages += NumberOfRequestedPages;
+    }
 
     NumberofJobs[THGT]++;
     NumberofJobs[TAT]++;
@@ -227,6 +274,8 @@ void Dispatcher() {
 
     // processOnCPU = DequeueProcess(EXITQUEUE);
     // XXX free(processOnCPU);
+
+    LongtermScheduler();
 
   } else { // Process still needs computing, out it on CPU
     TimePeriod CpuBurstTime = processOnCPU->CpuBurstTime;
@@ -288,13 +337,16 @@ void BookKeeping(void){
   if (NumberofJobs[WT] > 0){
     SumMetrics[WT] = SumMetrics[WT]/ (Average) NumberofJobs[WT];
   }
+  if (NumberofJobs[WTJQ] > 0){
+    SumMetrics[WTJQ] = SumMetrics[WTJQ] / (Average) NumberofJobs[WTJQ];
+  }
 
   printf("\n********* Processes Managemenent Numbers ******************************\n");
   printf("Policy Number = %d, Quantum = %.6f   Show = %d\n", PolicyNumber, Quantum, Show);
   printf("Number of Completed Processes = %d\n", NumberofJobs[THGT]);
-  printf("ATAT=%f   ART=%f  CBT = %f  T=%f AWT=%f\n", 
+  printf("ATAT=%f   ART=%f  CBT = %f  T=%f AWT=%f\n AWTJQ=%f\n", 
 	 SumMetrics[TAT], SumMetrics[RT], SumMetrics[CBT], 
-	 NumberofJobs[THGT]/Now(), SumMetrics[WT]);
+	 NumberofJobs[THGT]/Now(), SumMetrics[WT], SumMetrics[WTJQ]);
 
   exit(0);
 }
@@ -308,25 +360,244 @@ void BookKeeping(void){
 \***********************************************************************/
 void LongtermScheduler(void){
   ProcessControlBlock *currentProcess = DequeueProcess(JOBQUEUE);
+  Flag isSuccessful;
   while (currentProcess) {
-    currentProcess->TimeInJobQueue = Now() - currentProcess->JobArrivalTime; // Set TimeInJobQueue
-    currentProcess->JobStartTime = Now(); // Set JobStartTime
-    EnqueueProcess(READYQUEUE,currentProcess); // Place process in Ready Queue
-    currentProcess->state = READY; // Update process state
-    currentProcess = DequeueProcess(JOBQUEUE);
+   switch(policy) {
+    case OMAP: isSuccessful = omap(currentProcess);
+      break;
+    case PAGING: isSuccessful = paging(currentProcess);
+      break;
+    case BESTFIT: isSuccessful = bestfit(currentProcess);
+      break;
+    case WORSTFIT: isSuccessful = worstfit(currentProcess);
+      break;
+    case INFINITE: isSuccessful = TRUE;
+      break;
+   }
+    if (isSuccessful) {
+      currentProcess->TimeInJobQueue = Now() - currentProcess->JobArrivalTime;
+      currentProcess->MemoryAllocated = currentProcess->MemoryRequested;
+      SumMetrics[WTJQ] += currentProcess->TimeInJobQueue;
+      NumberofJobs[WTJQ]++;
+      currentProcess->JobStartTime = Now();
+      EnqueueProcess(READYQUEUE, currentProcess);
+      currentProcess->state = READY;
+      currentProcess = DequeueProcess(JOBQUEUE);
+    } else { // not enough memory, put it back and try again later
+      printf(">> not enough memory for process %d\n", currentProcess->ProcessID);
+      EnqueueProcess(JOBQUEUE, currentProcess);
+      break;
+    }
   }
 }
 
+Flag omap (ProcessControlBlock *currentProcess) {
+  if (AvailableMemory >= currentProcess->MemoryRequested ) {
+       AvailableMemory -= currentProcess->MemoryRequested;
+       currentProcess->MemoryAllocated = currentProcess->MemoryRequested;
+       printf(" >> allocated %u to %d, %u AvailableMemory\n", currentProcess->MemoryAllocated, currentProcess->ProcessID, AvailableMemory);
+       return TRUE;
+      } else { // not enough memory, put process back in job queue 
+        return FALSE;
+      }
+}
+
+
+
+Flag paging(ProcessControlBlock *currentProcess)  {
+  NumberOfRequestedPages = ceil((float) currentProcess->MemoryRequested/PageSize);
+  if (NumberOfAvailablePages >= NumberOfRequestedPages) {
+    NumberOfAvailablePages -= NumberOfRequestedPages;
+    return TRUE;
+  } else {
+    return FALSE;
+  }
+ 
+}
+
+Flag bestfit (ProcessControlBlock *currentProcess) {
+   struct MemoryBlock* currentMemoryBlock = MemoryBlocks.Head;
+   struct MemoryBlock* selectedMemoryBlock;
+   Memory sizeOfSmallestBlock = UINT_MAX; // -1 is max unsigned int (11111111... in binary)
+   while (currentMemoryBlock) {
+      // select the minimum of the unoccupied blocks that are large enough to accomodate the new process 
+      if (!currentMemoryBlock->process && currentMemoryBlock->size >= currentProcess->MemoryRequested && currentMemoryBlock->size <= sizeOfSmallestBlock) {
+        selectedMemoryBlock = currentMemoryBlock;
+        sizeOfSmallestBlock = currentMemoryBlock->size;
+      }
+      currentMemoryBlock = currentMemoryBlock->next;
+    }
+    if (selectedMemoryBlock && selectedMemoryBlock->top + currentProcess->MemoryRequested < AvailableMemory) { // assign that process to the selected blocks
+      //create new block to contain the process
+      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
+      newBlock->process = currentProcess;
+      newBlock->top = selectedMemoryBlock->top;
+      newBlock->size = currentProcess->MemoryRequested;
+      printf(" >> Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
+      push(newBlock);
+      //shrink the previous block by process size
+      currentProcess->TopOfMemory = selectedMemoryBlock->top;
+
+      selectedMemoryBlock->top += currentProcess->MemoryRequested;
+
+      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
+      return TRUE;
+    } else { // no unoccupied blocks big enough
+      // compact memory and try again
+      compactMemory();
+      if (!MemoryBlocks.Tail->process && MemoryBlocks.Tail->size >= currentProcess->MemoryRequested) {
+        //create new block to contain the process
+      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
+      newBlock->process = currentProcess;
+      newBlock->top = selectedMemoryBlock->top;
+      newBlock->size = currentProcess->MemoryRequested;
+      printf(" >> COMPACTION SUCCESS! Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
+      push(newBlock);
+      //shrink free block by process size, remove it if 0
+      currentProcess->TopOfMemory = selectedMemoryBlock->top;
+      selectedMemoryBlock->top += currentProcess->MemoryRequested;
+      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+Flag worstfit(ProcessControlBlock *currentProcess) {
+  struct MemoryBlock* currentMemoryBlock = MemoryBlocks.Head;
+   struct MemoryBlock* selectedMemoryBlock;
+   Memory sizeOfBiggestBlock = 0;
+   while (currentMemoryBlock) {
+      // select the maximum of the blocks that are large enough to accomodate the new process 
+      if (!currentMemoryBlock->process && currentMemoryBlock->size >= currentProcess->MemoryRequested && currentMemoryBlock->size >= sizeOfBiggestBlock) {
+        selectedMemoryBlock = currentMemoryBlock;
+        sizeOfBiggestBlock = selectedMemoryBlock->size;
+      }
+      currentMemoryBlock = currentMemoryBlock->next;
+    }
+    if (selectedMemoryBlock && selectedMemoryBlock->top + currentProcess->MemoryRequested <= AvailableMemory) { // assign that process to the selected blocks
+      //create new block to contain the process
+      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
+      newBlock->process = currentProcess;
+      newBlock->top = selectedMemoryBlock->top;
+      newBlock->size = currentProcess->MemoryRequested;
+      printf(" >> Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
+      push(newBlock);
+      //shrink free block by process size, remove it if 0
+      currentProcess->TopOfMemory = selectedMemoryBlock->top;
+      selectedMemoryBlock->top += currentProcess->MemoryRequested;
+      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
+      return TRUE;
+    } else {
+      compactMemory();
+      if (!MemoryBlocks.Tail->process && MemoryBlocks.Tail->size >= currentProcess->MemoryRequested) {
+        //create new block to contain the process
+      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
+      newBlock->process = currentProcess;
+      newBlock->top = selectedMemoryBlock->top;
+      newBlock->size = currentProcess->MemoryRequested;
+      printf(" >> COMPACTION SUCCESS! Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
+      push(newBlock);
+      //shrink free block by process size, remove it if 0
+      currentProcess->TopOfMemory = selectedMemoryBlock->top;
+      selectedMemoryBlock->top += currentProcess->MemoryRequested;
+      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
+      return TRUE;
+    } 
+  }
+  return FALSE;
+}
 
 /***********************************************************************\
 * Input : None                                                          *
 * Output: TRUE if Intialization successful                              *
 \***********************************************************************/
 Flag ManagementInitialization(void){
+  NumberOfAvailablePages = floor(AvailableMemory/PageSize); //AvailableMemory expressed as pages
   Metric m;
   for (m = TAT; m < MAXMETRICS; m++){
      NumberofJobs[m] = 0;
      SumMetrics[m]   = 0.0;
   }
-  return TRUE;
+  // Initialize double-linked list of memory blocks
+  struct MemoryBlock* memory = malloc(sizeof(MemoryBlock));
+  memory->top = 0;
+  memory->size = AvailableMemory;
+  MemoryBlocks.Head = memory;
+  MemoryBlocks.Tail = memory;
+  PrintMemoryBlocks();
+}
+
+Flag removeBlock(MemoryBlock *memoryBlock) {
+	if (memoryBlock) { // null check on parameter
+		if (memoryBlock->previous) {
+			if (memoryBlock->next) { // handles case where memoryBlock is in between 2 others in the list
+				memoryBlock->previous->next = memoryBlock->next;
+				memoryBlock->next->previous = memoryBlock->previous;
+				return TRUE;
+			} else { // handles case where memoryBlock is at the back of the list
+				MemoryBlocks.Tail = memoryBlock->previous;
+				memoryBlock->previous->next = NULL;
+				return TRUE;
+			}
+		} else if (memoryBlock->next) { // handles case where memoryBlock is at the front of the list
+			MemoryBlocks.Head = memoryBlock->next;
+			memoryBlock->next->previous = NULL;
+			return TRUE;
+		} else {
+			return FALSE;
+		}
+
+	}
+	
+}
+
+void compactMemory() {
+  printf("!! PERFORMING COMPACTION !!\n");
+  struct MemoryBlock *memoryBlock = MemoryBlocks.Head;
+  Memory sizeOfNewBlock = 0;
+  Memory addressOfNewBlock = 0;
+  int count = 0;
+  while (memoryBlock) { // iterate through all memory blocks
+    if (memoryBlock->process == NULL) { // remove unoccupied blocks and 
+      sizeOfNewBlock += memoryBlock->size;
+      removeBlock(memoryBlock);
+      count++;
+    } else {
+      memoryBlock->process->TopOfMemory = addressOfNewBlock;
+      addressOfNewBlock += memoryBlock->process->MemoryAllocated;
+    }
+    memoryBlock = memoryBlock->next;
+  }
+  if (sizeOfNewBlock > 0) {
+    struct MemoryBlock *newFreeBlock = malloc(sizeof(MemoryBlock));
+    newFreeBlock->size = sizeOfNewBlock;
+    newFreeBlock->top = addressOfNewBlock;
+    push(newFreeBlock);
+    printf("!! COMPACTED %d MEMORY BLOCKS FOR %d BYTES !!\n", count, sizeOfNewBlock);
+    PrintMemoryBlocks();
+  }
+}
+
+void push(MemoryBlock *memoryBlock) {
+  memoryBlock->previous = MemoryBlocks.Tail;
+  memoryBlock->previous->next = memoryBlock;
+  memoryBlock->next = NULL;
+  MemoryBlocks.Tail = memoryBlock;
+}
+
+
+void PrintMemoryBlocks() {
+  printf(">>>>>>>>>> MEMORY BLOCKS <<<<<<<<<<<<<\n");
+  struct MemoryBlock* temp = MemoryBlocks.Head;
+  while (temp) {
+    if (temp->process) {
+      printf("Block occupied by process %d at address %u\n",temp->process->ProcessID, temp->process->TopOfMemory);
+    } else {
+      printf("Unoccupied block location: %u Block size: %u\n",temp->top, temp->size);
+    }
+    temp = temp->next;
+  }
+
+  printf(">>>>>>>>>> END MEMORY BLOCKS <<<<<<<<<<<<<\n");
 }
