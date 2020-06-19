@@ -1,56 +1,64 @@
-
-/*****************************************************************************\
+/******************************************************************************
 * Laboratory Exercises COMP 3500                                              *
 * Author: Saad Biaz                                                           *
 * Updated 6/5/2017 to distribute to students to redo Lab 1                    *
 * Updated 5/9/2017 for COMP 3500 labs                                         *
 * Date  : February 20, 2009                                                   *
-\*****************************************************************************/
+******************************************************************************/
 
-/*****************************************************************************\
+
+/******************************************************************************
 *                             Global system headers                           *
-\*****************************************************************************/
-
-
+******************************************************************************/
 #include "common2.h"
 
-/*****************************************************************************\
+
+/******************************************************************************
 *                             Global data types                               *
-\*****************************************************************************/
+******************************************************************************/
+typedef enum {TAT,RT,CBT,THGT,WT,WTJQ} Metric;
+typedef enum {FREEHOLES, PARKING} MemoryQueue;
+typedef enum {INFINITE,OMAP,PAGING,BESTFIT,WORSTFIT} MemoryPolicy;
 
-typedef enum {TAT,RT,CBT,THGT,WT} Metric;
 
-
-/*****************************************************************************\
+/******************************************************************************
 *                             Global definitions                              *
-\*****************************************************************************/
+******************************************************************************/
 #define MAX_QUEUE_SIZE 10 
 #define FCFS            1 
 #define RR              3 
+#define MAXMETRICS      6
 
 
-#define MAXMETRICS      5 
-
-
-
-/*****************************************************************************\
+/******************************************************************************
 *                            Global data structures                           *
-\*****************************************************************************/
+******************************************************************************/
+typedef struct FreeMemoryHoleTag{
+  Memory       AddressFirstElement; // Address of first element 
+  Memory       Size;                // Size of the hole
+  struct FreeMemoryHoleTag *previous; /* previous element in linked list */
+  struct FreeMemoryHoleTag *next;     /* next element in linked list */
+} FreeMemoryHole;
+
+typedef struct MemoryQueueParmsTag{
+  FreeMemoryHole *Head;
+  FreeMemoryHole *Tail;
+  Quantity       NumberOfHoles; // Number of Holes in the queue
+} MemoryQueueParms;
 
 
-
-
-/*****************************************************************************\
+/******************************************************************************
 *                                  Global data                                *
-\*****************************************************************************/
-
+******************************************************************************/
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
+MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
+MemoryPolicy memoryPolicy = INFINITE; // Memory management starategy
 
-/*****************************************************************************\
+
+/******************************************************************************
 *                               Function prototypes                           *
-\*****************************************************************************/
-
+******************************************************************************/
 void                 ManageProcesses(void);
 void                 NewJobIn(ProcessControlBlock whichProcess);
 void                 BookKeeping(void);
@@ -58,10 +66,14 @@ Flag                 ManagementInitialization(void);
 void                 LongtermScheduler(void);
 void                 IO();
 void                 CPUScheduler(Identifier whichPolicy);
-ProcessControlBlock *SRTF();
+ProcessControlBlock  *SRTF();
 void                 Dispatcher();
+void                 EnqueueMemoryHole(MemoryQueue whichQueue, FreeMemoryHole *whichProcess);
+FreeMemoryHole       *DequeueMemoryHole(MemoryQueue whichQueue);
+Memory               getStartAddress(ProcessControlBlock *whichProcess);
 
-/*****************************************************************************\
+
+/******************************************************************************
 * function: main()                                                            *
 * usage:    Create an artificial environment operating systems. The parent    *
 *           process is the "Operating Systems" managing the processes using   *
@@ -72,20 +84,19 @@ void                 Dispatcher();
 *                                                                             *
 * INITIALIZE PROGRAM ENVIRONMENT                                              *
 * START CONTROL ROUTINE                                                       *
-\*****************************************************************************/
-
+******************************************************************************/
 int main (int argc, char **argv) {
    if (Initialization(argc,argv)){
      ManageProcesses();
    }
 } /* end of main function */
 
-/***********************************************************************\
+
+/************************************************************************
 * Input : none                                                          *
 * Output: None                                                          *
 * Function: Monitor Sources and process events (written by students)    *
-\***********************************************************************/
-
+************************************************************************/
 void ManageProcesses(void){
   ManagementInitialization();
   while (1) {
@@ -95,7 +106,8 @@ void ManageProcesses(void){
   }
 }
 
-/***********************************************************************\
+
+/************************************************************************
 * Input : none                                                          *          
 * Output: None                                                          *        
 * Function:                                                             *
@@ -103,7 +115,7 @@ void ManageProcesses(void){
 *         otherwise (RR) return to rReady Queue                         *                           
 *    2) scan Waiting Queue to find processes with complete I/O          *
 *           and move them to Ready Queue                                *         
-\***********************************************************************/
+************************************************************************/
 void IO() {
   ProcessControlBlock *currentProcess = DequeueProcess(RUNNINGQUEUE); 
   if (currentProcess){
@@ -143,11 +155,12 @@ void IO() {
   } // if (ProcessToMove)
 }
 
-/***********************************************************************\    
- * Input : whichPolicy (1:FCFS, 2: SRTF, and 3:RR)                      *        
- * Output: None                                                         * 
- * Function: Selects Process from Ready Queue and Puts it on Running Q. *
-\***********************************************************************/
+
+/***********************************************************************
+* Input : whichPolicy (1:FCFS, 2: SRTF, and 3:RR)                      *       
+* Output: None                                                         *
+* Function: Selects Process from Ready Queue and Puts it on Running Q. *
+***********************************************************************/
 void CPUScheduler(Identifier whichPolicy) {
   ProcessControlBlock *selectedProcess;
   if ((whichPolicy == FCFS) || (whichPolicy == RR)) {
@@ -161,11 +174,12 @@ void CPUScheduler(Identifier whichPolicy) {
   }
 }
 
-/***********************************************************************\                         
- * Input : None                                                         *                                     
- * Output: Pointer to the process with shortest remaining time (SRTF)   *                                     
- * Function: Returns process control block with SRTF                    *                                     
-\***********************************************************************/
+
+/************************************************************************                        
+* Input : None                                                          *                                     
+* Output: Pointer to the process with shortest remaining time (SRTF)    *                                     
+* Function: Returns process control block with SRTF                     *                                     
+************************************************************************/
 ProcessControlBlock *SRTF() {
   /* Select Process with Shortest Remaining Time*/
   ProcessControlBlock *selectedProcess, *currentProcess = DequeueProcess(READYQUEUE);
@@ -191,6 +205,7 @@ ProcessControlBlock *SRTF() {
   } // if (currentProcess)
   return(selectedProcess);
 }
+
 
 /***********************************************************************\  
  * Input : None                                                         *   
@@ -234,7 +249,7 @@ void Dispatcher() {
     if (PolicyNumber == RR){
       CpuBurstTime = Quantum;
       if (processOnCPU->RemainingCpuBurstTime < Quantum)
-	CpuBurstTime = processOnCPU->RemainingCpuBurstTime;
+	      CpuBurstTime = processOnCPU->RemainingCpuBurstTime;
     }
     processOnCPU->RemainingCpuBurstTime -= CpuBurstTime;
     // SB_ 6/4 End Fixes RR 
@@ -309,11 +324,16 @@ void BookKeeping(void){
 void LongtermScheduler(void){
   ProcessControlBlock *currentProcess = DequeueProcess(JOBQUEUE);
   while (currentProcess) {
-    currentProcess->TimeInJobQueue = Now() - currentProcess->JobArrivalTime; // Set TimeInJobQueue
-    currentProcess->JobStartTime = Now(); // Set JobStartTime
-    EnqueueProcess(READYQUEUE,currentProcess); // Place process in Ready Queue
-    currentProcess->state = READY; // Update process state
-    currentProcess = DequeueProcess(JOBQUEUE);
+    if (getStartAddress(currentProcess) != -1) {
+      currentProcess->TimeInJobQueue = Now() - currentProcess->JobArrivalTime; // Set TimeInJobQueue
+      currentProcess->JobStartTime = Now(); // Set JobStartTime
+      EnqueueProcess(READYQUEUE,currentProcess); // Place process in Ready Queue
+      currentProcess->state = READY; // Update process state
+      currentProcess = DequeueProcess(JOBQUEUE);
+    }
+    else {
+      EnqueueProcess(JOBQUEUE, currentProcess);
+    }
   }
 }
 
@@ -328,5 +348,125 @@ Flag ManagementInitialization(void){
      NumberofJobs[m] = 0;
      SumMetrics[m]   = 0.0;
   }
+
+  FreeMemoryHole *NewMemoryHole;
+  int i;
+  //Initialize the queues
+  for (i = 0; i < 2; i++){
+    MemoryQueues[i].Tail = (FreeMemoryHole *) NULL;
+    MemoryQueues[i].Head = (FreeMemoryHole *) NULL;
+    MemoryQueues[i].NumberOfHoles = 0;
+  }
+ 
+  // Create initial big memory holes containing the full memory
+  NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+  if (NewMemoryHole){ // malloc successful
+    NewMemoryHole->AddressFirstElement = 0;
+    NewMemoryHole->Size = MAXMEMORYSIZE;
+
+    // Move what was in the parking into the Queue of free holes
+    FreeMemoryHole *aFreeMemoryHole;
+    aFreeMemoryHole = DequeueMemoryHole(PARKING);
+    EnqueueMemoryHole(FREEHOLES,aFreeMemoryHole);
+
+    // Testing:
+    printf("Number of holes in Parking = %d\n",MemoryQueues[PARKING].NumberOfHoles);
+    if (MemoryQueues[PARKING].NumberOfHoles)
+      printf("Parking should be empty");
+
+                                                                                  
+    printf("Number of holes in Free Holes = %d\n",MemoryQueues[FREEHOLES].NumberOfHoles);
+    if (MemoryQueues[FREEHOLES].NumberOfHoles){
+      printf("Starting Address %d\n",MemoryQueues[FREEHOLES].Tail->AddressFirstElement);
+      printf("Size in hexadecimal 0x%x\n",MemoryQueues[FREEHOLES].Tail->Size);
+    }
+  }
+
   return TRUE;
+}
+
+
+/***********************************************************************\                                            
+ * Input : Queue where to enqueue and Element to enqueue                 *                                            
+ * Output: Updates Head and Tail as needed                               *                                            
+ * Function: Enqueues FIFO element in queue and updates tail and head    *                                            
+\***********************************************************************/
+void EnqueueMemoryHole(MemoryQueue whichQueue, FreeMemoryHole *whichMemoryHole){
+  if (whichMemoryHole == (FreeMemoryHole *) NULL) {
+    return;
+  }
+
+  MemoryQueues[whichQueue].NumberOfHoles++;
+
+  /* Enqueue the process in the queue */
+  if (MemoryQueues[whichQueue].Head)
+    MemoryQueues[whichQueue].Head->previous = whichMemoryHole;
+
+  whichMemoryHole->next = MemoryQueues[whichQueue].Head;
+  whichMemoryHole->previous = NULL;
+  MemoryQueues[whichQueue].Head = whichMemoryHole;
+
+  if (MemoryQueues[whichQueue].Tail == NULL)
+    MemoryQueues[whichQueue].Tail = whichMemoryHole;
+}
+
+
+/***********************************************************************\                                            
+ * Input : Queue where to enqueue and Element to enqueue                *                                            
+ * Output: Returns tail of queue                                        *                                            
+ * Function: Removes tail elelemnt and updates tail and head as needed  *                                            
+\***********************************************************************/
+FreeMemoryHole *DequeueMemoryHole(MemoryQueue whichQueue){
+  FreeMemoryHole *HoleToRemove;
+
+  HoleToRemove = MemoryQueues[whichQueue].Tail;
+  if (HoleToRemove != (FreeMemoryHole *) NULL) {
+    MemoryQueues[whichQueue].NumberOfHoles--;
+
+    HoleToRemove->next = (FreeMemoryHole *) NULL;
+    MemoryQueues[whichQueue].Tail = MemoryQueues[whichQueue].Tail->previous;
+
+    HoleToRemove->previous =(FreeMemoryHole *) NULL;
+    if (MemoryQueues[whichQueue].Tail == (FreeMemoryHole *) NULL){
+      MemoryQueues[whichQueue].Head = (FreeMemoryHole *) NULL;
+    } else {
+      MemoryQueues[whichQueue].Tail->next = (FreeMemoryHole *) NULL;
+    }
+  }
+
+  return(HoleToRemove);
+}
+
+
+/************************************************************************                                            
+* Input : Pointer to process being allocated some memory                *                                            
+* Output: Returns address of allocated memory block                     *                                            
+* Function: Handles allocation of memory for a process                  *                                            
+************************************************************************/
+Memory getStartAddress(ProcessControlBlock *whichProcess) {
+  switch(MEMORYPOLICY) {
+    case OMAP: 
+      if (AvailableMemory >= currentProcess->MemoryRequested ) {
+       AvailableMemory -= currentProcess->MemoryRequested;
+       currentProcess->MemoryAllocated = currentProcess->MemoryRequested;
+       printf(" >> allocated %u to %d, %u AvailableMemory\n", 
+        currentProcess->MemoryAllocated, currentProcess->ProcessID, AvailableMemory);
+       return TRUE;
+      } else { // not enough memory, put process back in job queue 
+        return -1;
+      }
+      break;
+    case PAGING: 
+      // Insert code for paging
+      break;
+    case BESTFIT: 
+      // Insert code for bestfit
+      break;
+    case WORSTFIT: 
+      // Insert code for worstfit
+      break;
+    case INFINITE:
+      return 1;
+      break;
+   }
 }
