@@ -241,7 +241,7 @@ void Dispatcher() {
 
     if (memoryPolicy == OMAP) {
       AvailableMemory += processOnCPU->MemoryAllocated;
-      printf(" >>>>>Deallocated %u bytes from process # %d\n", 
+      printf(" >>>>>Deallocated %u bytes from process # %d, %u bytes available\n", 
         processOnCPU->MemoryAllocated, processOnCPU->ProcessID);
       processOnCPU->MemoryAllocated = 0;
     }
@@ -460,10 +460,12 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
       if (AvailableMemory >= whichProcess->MemoryRequested ) {
        AvailableMemory -= whichProcess->MemoryRequested;
        whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
-       printf(" >> allocated %u to %d, %u AvailableMemory\n", 
+       printf(" >>>>>Allocated %u bytes to %d, %u bytes available\n", 
         whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory);
        return TRUE;
       } else { // not enough memory, put process back in job queue 
+        printf(" >>>>>Denied %u bytes to %d, %u bytes available\n", 
+        whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory)
         return -1;
       }
       break;
