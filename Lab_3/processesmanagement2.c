@@ -242,7 +242,7 @@ void Dispatcher() {
     if (memoryPolicy == OMAP) {
       AvailableMemory += processOnCPU->MemoryAllocated;
       printf(" >>>>>Deallocated %u bytes from process # %d, %u bytes available\n", 
-        processOnCPU->MemoryAllocated, processOnCPU->ProcessID);
+        processOnCPU->MemoryAllocated, processOnCPU->ProcessID, AvailableMemory);
       processOnCPU->MemoryAllocated = 0;
     }
     // processOnCPU = DequeueProcess(EXITQUEUE);
@@ -469,15 +469,19 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
         return -1;
       }
       break;
+
     case PAGING: 
       // Insert code for paging
       break;
+
     case BESTFIT: 
       // Insert code for bestfit
       break;
+
     case WORSTFIT: 
       // Insert code for worstfit
       break;
+
     case INFINITE:
       return 1;
       break;
