@@ -465,7 +465,7 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
        return TRUE;
       } else { // not enough memory, put process back in job queue 
         printf(" >>>>>Denied %u bytes to %d, %u bytes available\n", 
-        whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory)
+        whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory);
         return -1;
       }
       break;
