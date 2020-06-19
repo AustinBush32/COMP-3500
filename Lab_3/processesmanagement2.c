@@ -244,6 +244,7 @@ void Dispatcher() {
       printf(" >>>>>Deallocated %u bytes from process # %d\n", 
         processOnCPU->MemoryAllocated, processOnCPU->ProcessID);
       processOnCPU->MemoryAllocated = 0;
+    }
     // processOnCPU = DequeueProcess(EXITQUEUE);
     // XXX free(processOnCPU);
 
