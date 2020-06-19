@@ -444,13 +444,13 @@ FreeMemoryHole *DequeueMemoryHole(MemoryQueue whichQueue){
 * Function: Handles allocation of memory for a process                  *                                            
 ************************************************************************/
 Memory getStartAddress(ProcessControlBlock *whichProcess) {
-  switch(MEMORYPOLICY) {
+  switch(memoryPolicy) {
     case OMAP: 
-      if (AvailableMemory >= currentProcess->MemoryRequested ) {
-       AvailableMemory -= currentProcess->MemoryRequested;
-       currentProcess->MemoryAllocated = currentProcess->MemoryRequested;
+      if (AvailableMemory >= whichProcess->MemoryRequested ) {
+       AvailableMemory -= whichProcess->MemoryRequested;
+       whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
        printf(" >> allocated %u to %d, %u AvailableMemory\n", 
-        currentProcess->MemoryAllocated, currentProcess->ProcessID, AvailableMemory);
+        whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory);
        return TRUE;
       } else { // not enough memory, put process back in job queue 
         return -1;
