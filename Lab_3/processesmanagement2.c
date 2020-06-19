@@ -304,12 +304,16 @@ void BookKeeping(void){
     SumMetrics[WT] = SumMetrics[WT]/ (Average) NumberofJobs[WT];
   }
 
+  if (NumberofJobs[WTJQ] > 0) {
+    SumMetrics[WTJQ] = SumMetrics[WTJQ] / (Average) NumberofJobs[WTJQ];
+  }
+
   printf("\n********* Processes Managemenent Numbers ******************************\n");
   printf("Policy Number = %d, Quantum = %.6f   Show = %d\n", PolicyNumber, Quantum, Show);
   printf("Number of Completed Processes = %d\n", NumberofJobs[THGT]);
-  printf("ATAT=%f   ART=%f  CBT = %f  T=%f AWT=%f\n", 
+  printf("ATAT=%f   ART=%f  CBT = %f  T=%f AWT=%f\n AWTJQ=%f\n", 
 	 SumMetrics[TAT], SumMetrics[RT], SumMetrics[CBT], 
-	 NumberofJobs[THGT]/Now(), SumMetrics[WT]);
+	 NumberofJobs[THGT]/Now(), SumMetrics[WT], SumMetrics[WTJQ]);
 
   exit(0);
 }
@@ -327,6 +331,8 @@ void LongtermScheduler(void){
     if (getStartAddress(currentProcess) != -1) {
       currentProcess->TimeInJobQueue = Now() - currentProcess->JobArrivalTime; // Set TimeInJobQueue
       currentProcess->JobStartTime = Now(); // Set JobStartTime
+      SumMetrics[WTJQ] = currentProcess->TimeInJobQueue; // Record time in job queue
+      NumberofJobs[WTJQ]++;
       EnqueueProcess(READYQUEUE,currentProcess); // Place process in Ready Queue
       currentProcess->state = READY; // Update process state
       currentProcess = DequeueProcess(JOBQUEUE);
