@@ -53,7 +53,7 @@ typedef struct MemoryQueueParmsTag{
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
-MemoryPolicy memoryPolicy = INFINITE; // Memory management starategy
+MemoryPolicy memoryPolicy = OMAP; // Memory management starategy
 
 
 /******************************************************************************
@@ -239,7 +239,11 @@ void Dispatcher() {
     SumMetrics[TAT]     += Now() - processOnCPU->JobArrivalTime;
     SumMetrics[WT]      += processOnCPU->TimeInReadyQueue;
 
-
+    if (memoryPolicy == OMAP) {
+      AvailableMemory += processOnCPU->MemoryAllocated;
+      printf(" >>>>>Deallocated %u bytes from process # %d\n", 
+        processOnCPU->MemoryAllocated, processOnCPU->ProcessID);
+      processOnCPU->MemoryAllocated = 0;
     // processOnCPU = DequeueProcess(EXITQUEUE);
     // XXX free(processOnCPU);
 
