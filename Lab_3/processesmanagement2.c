@@ -54,7 +54,7 @@ Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collec
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
 MemoryPolicy memoryPolicy = PAGING;
-int const pageSize = 256;
+int pageSize = 256;
 float pagesAvailable = (float) AvailableMemory / (float) pageSize;
 
 
@@ -514,6 +514,6 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
       return 1;
       break;
     }
-    
+
    }
 }
