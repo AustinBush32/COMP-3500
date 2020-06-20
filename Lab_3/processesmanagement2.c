@@ -408,58 +408,6 @@ Flag ManagementInitialization(void){
 }
 
 
-/***********************************************************************\                                            
- * Input : Queue where to enqueue and Element to enqueue                 *                                            
- * Output: Updates Head and Tail as needed                               *                                            
- * Function: Enqueues FIFO element in queue and updates tail and head    *                                            
-\***********************************************************************/
-void EnqueueMemoryHole(MemoryQueue whichQueue, FreeMemoryHole *whichMemoryHole){
-  if (whichMemoryHole == (FreeMemoryHole *) NULL) {
-    return;
-  }
-
-  MemoryQueues[whichQueue].NumberOfHoles++;
-
-  /* Enqueue the process in the queue */
-  if (MemoryQueues[whichQueue].Head)
-    MemoryQueues[whichQueue].Head->previous = whichMemoryHole;
-
-  whichMemoryHole->next = MemoryQueues[whichQueue].Head;
-  whichMemoryHole->previous = NULL;
-  MemoryQueues[whichQueue].Head = whichMemoryHole;
-
-  if (MemoryQueues[whichQueue].Tail == NULL)
-    MemoryQueues[whichQueue].Tail = whichMemoryHole;
-}
-
-
-/***********************************************************************\                                            
- * Input : Queue where to enqueue and Element to enqueue                *                                            
- * Output: Returns tail of queue                                        *                                            
- * Function: Removes tail elelemnt and updates tail and head as needed  *                                            
-\***********************************************************************/
-FreeMemoryHole *DequeueMemoryHole(MemoryQueue whichQueue){
-  FreeMemoryHole *HoleToRemove;
-
-  HoleToRemove = MemoryQueues[whichQueue].Tail;
-  if (HoleToRemove != (FreeMemoryHole *) NULL) {
-    MemoryQueues[whichQueue].NumberOfHoles--;
-
-    HoleToRemove->next = (FreeMemoryHole *) NULL;
-    MemoryQueues[whichQueue].Tail = MemoryQueues[whichQueue].Tail->previous;
-
-    HoleToRemove->previous =(FreeMemoryHole *) NULL;
-    if (MemoryQueues[whichQueue].Tail == (FreeMemoryHole *) NULL){
-      MemoryQueues[whichQueue].Head = (FreeMemoryHole *) NULL;
-    } else {
-      MemoryQueues[whichQueue].Tail->next = (FreeMemoryHole *) NULL;
-    }
-  }
-
-  return(HoleToRemove);
-}
-
-
 /************************************************************************                                            
 * Input : Pointer to process being allocated some memory                *                                            
 * Output: Returns address of allocated memory block                     *                                            
@@ -519,4 +467,56 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
     }
 
    }
+}
+
+
+/***********************************************************************\                                            
+ * Input : Queue where to enqueue and Element to enqueue                 *                                            
+ * Output: Updates Head and Tail as needed                               *                                            
+ * Function: Enqueues FIFO element in queue and updates tail and head    *                                            
+\***********************************************************************/
+void EnqueueMemoryHole(MemoryQueue whichQueue, FreeMemoryHole *whichMemoryHole){
+  if (whichMemoryHole == (FreeMemoryHole *) NULL) {
+    return;
+  }
+
+  MemoryQueues[whichQueue].NumberOfHoles++;
+
+  /* Enqueue the process in the queue */
+  if (MemoryQueues[whichQueue].Head)
+    MemoryQueues[whichQueue].Head->previous = whichMemoryHole;
+
+  whichMemoryHole->next = MemoryQueues[whichQueue].Head;
+  whichMemoryHole->previous = NULL;
+  MemoryQueues[whichQueue].Head = whichMemoryHole;
+
+  if (MemoryQueues[whichQueue].Tail == NULL)
+    MemoryQueues[whichQueue].Tail = whichMemoryHole;
+}
+
+
+/***********************************************************************\                                            
+ * Input : Queue where to enqueue and Element to enqueue                *                                            
+ * Output: Returns tail of queue                                        *                                            
+ * Function: Removes tail elelemnt and updates tail and head as needed  *                                            
+\***********************************************************************/
+FreeMemoryHole *DequeueMemoryHole(MemoryQueue whichQueue){
+  FreeMemoryHole *HoleToRemove;
+
+  HoleToRemove = MemoryQueues[whichQueue].Tail;
+  if (HoleToRemove != (FreeMemoryHole *) NULL) {
+    MemoryQueues[whichQueue].NumberOfHoles--;
+
+    HoleToRemove->next = (FreeMemoryHole *) NULL;
+    MemoryQueues[whichQueue].Tail = MemoryQueues[whichQueue].Tail->previous;
+
+    HoleToRemove->previous =(FreeMemoryHole *) NULL;
+    if (MemoryQueues[whichQueue].Tail == (FreeMemoryHole *) NULL){
+      MemoryQueues[whichQueue].Head = (FreeMemoryHole *) NULL;
+    } else {
+      MemoryQueues[whichQueue].Tail->next = (FreeMemoryHole *) NULL;
+    }
+  }
+
+  return(HoleToRemove);
 }
