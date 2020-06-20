@@ -53,7 +53,9 @@ typedef struct MemoryQueueParmsTag{
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
-MemoryPolicy memoryPolicy = OMAP; // Memory management starategy
+MemoryPolicy memoryPolicy = PAGING;
+int const pageSize = 256;
+float pagesAvailable = (float) AvailableMemory / (float) pageSize;
 
 
 /******************************************************************************
@@ -236,14 +238,20 @@ void Dispatcher() {
     NumberofJobs[TAT]++;
     NumberofJobs[WT]++;
     NumberofJobs[CBT]++;
-    SumMetrics[TAT]     += Now() - processOnCPU->JobArrivalTime;
-    SumMetrics[WT]      += processOnCPU->TimeInReadyQueue;
+    SumMetrics[TAT] += Now() - processOnCPU->JobArrivalTime;
+    SumMetrics[WT] += processOnCPU->TimeInReadyQueue;
 
     if (memoryPolicy == OMAP) {
       AvailableMemory += processOnCPU->MemoryAllocated;
       printf(" >>>>>Deallocated %u bytes from process # %d, %u bytes available\n", 
         processOnCPU->MemoryAllocated, processOnCPU->ProcessID, AvailableMemory);
       processOnCPU->MemoryAllocated = 0;
+    }
+    else if (policy == PAGING) {
+      float pagesRequested = floor((float) currentProcess->MemoryRequested/ (float) pageSize);
+      printf(" >> Deallocated %d pages from process # %d, %d pages available\n", 
+        pagesRequested, processOnCPU->ProcessID, pagesAvailable);
+      pagesAvailable += pagesRequested;
     }
     // processOnCPU = DequeueProcess(EXITQUEUE);
     // XXX free(processOnCPU);
@@ -462,7 +470,7 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
        whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
        printf(" >>>>>Allocated %u bytes to %d, %u bytes available\n", 
         whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory);
-       return TRUE;
+       return 1;
       } else { // not enough memory, put process back in job queue 
         printf(" >>>>>Denied %u bytes to %d, %u bytes available\n", 
         whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory);
@@ -471,7 +479,18 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
       break;
 
     case PAGING: 
-      // Insert code for paging
+      float pagesRequested = floor((float) currentProcess->MemoryRequested/ (float) pageSize);
+      if (pagesAvailable >= pagesRequested) {
+        pagesAvailable -= pagesRequested;
+        printf(" >>>>>Allocated %u pages to %d, %u pages available\n", 
+        pagesRequested, whichProcess->ProcessID, pagesAvailable);
+        return 1;
+      } 
+      else {
+        printf(" >>>>>Denied %u pages to %d, %u pages available\n", 
+        pagesRequested, whichProcess->ProcessID, pagesAvailable);
+        return -1;
+      }
       break;
 
     case BESTFIT: 
