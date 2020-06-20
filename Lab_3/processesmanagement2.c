@@ -55,7 +55,7 @@ Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
 MemoryPolicy memoryPolicy = PAGING;
 int pageSize;
-float pagesAvailable;
+int pagesAvailable;
 
 
 /******************************************************************************
@@ -248,7 +248,7 @@ void Dispatcher() {
       processOnCPU->MemoryAllocated = 0;
     }
     else if (memoryPolicy == PAGING) {
-      float pagesRequested = floor((float) processOnCPU->MemoryRequested/ (float) pageSize);
+      int pagesRequested =  processOnCPU->MemoryRequested / pageSize;
       printf(" >> Deallocated %d pages from process # %d, %d pages available\n", 
         pagesRequested, processOnCPU->ProcessID, pagesAvailable);
       pagesAvailable += pagesRequested;
@@ -369,8 +369,8 @@ Flag ManagementInitialization(void){
   }
 
   pageSize = 256;
-  pagesAvailable = (float) AvailableMemory / (float) pageSize;
-  printf("%davmem, %dpagesize, %d pages\n", (float) AvailableMemory, pageSize, pagesAvailable);
+  pagesAvailable = AvailableMemory / pageSize;
+  printf("%uavmem, %upagesize, %upages\n", AvailableMemory, pageSize, pagesAvailable);
   FreeMemoryHole *NewMemoryHole;
   int i;
   //Initialize the queues
@@ -485,7 +485,7 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
 
     case PAGING: 
     { 
-      float pagesRequested = floor((float) whichProcess->MemoryRequested / (float) pageSize);
+      pagesRequested = whichProcess->MemoryRequested / pageSize;
       if (pagesAvailable >= pagesRequested) {
         pagesAvailable -= pagesRequested;
         printf(" >>>>>Allocated %u pages to %d, %u pages available\n", 
