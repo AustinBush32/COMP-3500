@@ -370,7 +370,7 @@ Flag ManagementInitialization(void){
 
   pageSize = 256;
   pagesAvailable = (float) AvailableMemory / (float) pageSize;
-  printf("%d pages", pagesAvailable);
+  printf("%davmem, %dpagesize, %d pages\n", (float) AvailableMemory, pageSize, pagesAvailable);
   FreeMemoryHole *NewMemoryHole;
   int i;
   //Initialize the queues
