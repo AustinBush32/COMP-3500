@@ -54,8 +54,8 @@ Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collec
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
 MemoryPolicy memoryPolicy = PAGING;
-int pageSize = 256;
-float pagesAvailable = (float) AvailableMemory / (float) pageSize;
+int pageSize;
+float pagesAvailable;
 
 
 /******************************************************************************
@@ -368,6 +368,8 @@ Flag ManagementInitialization(void){
      SumMetrics[m]   = 0.0;
   }
 
+  pageSize = 256;
+  pagesAvailable = (float) AvailableMemory / (float) pageSize;
   FreeMemoryHole *NewMemoryHole;
   int i;
   //Initialize the queues
