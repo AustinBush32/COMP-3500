@@ -53,7 +53,7 @@ typedef struct MemoryQueueParmsTag {
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
-MemoryPolicy memoryPolicy = PAGING;
+MemoryPolicy memoryPolicy = BESTFIT;
 int pageSize;
 int pagesAvailable;
 
@@ -256,12 +256,12 @@ void Dispatcher() {
     }
     else if (memoryPolicy == BESTFIT || memoryPolicy == WORSTFIT) {
         FreeMemoryHole *newMemoryHole;
-        NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
-        if (NewMemoryHole){ // malloc successful
+        newMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+        if (newMemoryHole){ // malloc successful
             if (processOnCPU->MemoryAllocated > 0) {
-                NewMemoryHole->AddressFirstElement = processOnCPU->TopOfMemory;
-                NewMemoryHole->Size = processOnCPU->MemoryAllocated;
-                EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
+                newMemoryHole->AddressFirstElement = processOnCPU->TopOfMemory;
+                newMemoryHole->Size = processOnCPU->MemoryAllocated;
+                EnqueueMemoryHole(FREEHOLES, newMemoryHole);
             }
         }
     }
@@ -462,19 +462,22 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
 
     case BESTFIT: 
     {
-        FreeMemoryHole *currentMemoryHole = DequeueMemoryHole(FREEHOLES);
+        FreeMemoryHole *currentMemoryHole;
         FreeMemoryHole *selectedMemoryHole;
         Memory sizeOfSmallestHole = UINT_MAX;
         int i;
+        
         for (i = 0; i < MemoryQueues[FREEHOLES].NumberOfHoles; i++) {
-            if (currentMemoryHole->Size >= whichProcess->MemoryRequested && currentMemoryHole <= sizeOfSmallestHole) {
-                if (selectedMemoryHole) {
-                    EnqueueMemoryHole(FREEHOLES, selectedMemoryHole);
-                }
-                selectedMemoryHole = currentMemoryHole;
-                sizeOfSmallestHole = currentMemoryHole->Size;
+          currentMemoryHole = DequeueMemoryHole(FREEHOLES);
+          if (currentMemoryHole->Size >= whichProcess->MemoryRequested && currentMemoryHole->Size <= sizeOfSmallestHole) {
+            if (selectedMemoryHole) {
+                EnqueueMemoryHole(FREEHOLES, selectedMemoryHole);
             }
-            currentMemoryHole = DequeueMemoryHole(FREEHOLES);
+            selectedMemoryHole = currentMemoryHole;
+            sizeOfSmallestHole = currentMemoryHole->Size;
+          } else {
+            EnqueueMemoryHole(FREEHOLES, currentMemoryHole);
+          }
         }
         if(selectedMemoryHole) {
             printf(" >> Allocating hole at %u to process %d\n", selectedMemoryHole->AddressFirstElement, whichProcess->ProcessID);
