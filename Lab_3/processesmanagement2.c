@@ -247,8 +247,8 @@ void Dispatcher() {
         processOnCPU->MemoryAllocated, processOnCPU->ProcessID, AvailableMemory);
       processOnCPU->MemoryAllocated = 0;
     }
-    else if (policy == PAGING) {
-      float pagesRequested = floor((float) currentProcess->MemoryRequested/ (float) pageSize);
+    else if (memoryPolicy == PAGING) {
+      float pagesRequested = floor((float) processOnCPU->MemoryRequested/ (float) pageSize);
       printf(" >> Deallocated %d pages from process # %d, %d pages available\n", 
         pagesRequested, processOnCPU->ProcessID, pagesAvailable);
       pagesAvailable += pagesRequested;
@@ -465,6 +465,7 @@ FreeMemoryHole *DequeueMemoryHole(MemoryQueue whichQueue){
 Memory getStartAddress(ProcessControlBlock *whichProcess) {
   switch(memoryPolicy) {
     case OMAP: 
+    {
       if (AvailableMemory >= whichProcess->MemoryRequested ) {
        AvailableMemory -= whichProcess->MemoryRequested;
        whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
@@ -477,9 +478,11 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
         return -1;
       }
       break;
+    }
 
     case PAGING: 
-      float pagesRequested = floor((float) currentProcess->MemoryRequested/ (float) pageSize);
+    { 
+      float pagesRequested = floor((float) whichProcess->MemoryRequested / (float) pageSize);
       if (pagesAvailable >= pagesRequested) {
         pagesAvailable -= pagesRequested;
         printf(" >>>>>Allocated %u pages to %d, %u pages available\n", 
@@ -492,17 +495,25 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
         return -1;
       }
       break;
+    }
 
     case BESTFIT: 
+    {
       // Insert code for bestfit
       break;
+    }
 
     case WORSTFIT: 
+    {
       // Insert code for worstfit
       break;
+    }
 
     case INFINITE:
+    {
       return 1;
       break;
+    }
+    
    }
 }
