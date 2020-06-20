@@ -352,6 +352,7 @@ void LongtermScheduler(void){
     }
     else {
       EnqueueProcess(JOBQUEUE, currentProcess);
+      break;
     }
   }
 }
