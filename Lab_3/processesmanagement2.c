@@ -1,74 +1,67 @@
-
-/*****************************************************************************\
+/******************************************************************************
 * Laboratory Exercises COMP 3500                                              *
 * Author: Saad Biaz                                                           *
 * Updated 6/5/2017 to distribute to students to redo Lab 1                    *
 * Updated 5/9/2017 for COMP 3500 labs                                         *
 * Date  : February 20, 2009                                                   *
-\*****************************************************************************/
+******************************************************************************/
 
-/*****************************************************************************\
+
+/******************************************************************************
 *                             Global system headers                           *
-\*****************************************************************************/
-
-
+******************************************************************************/
 #include "common2.h"
 
-/*****************************************************************************\
+
+/******************************************************************************
 *                             Global data types                               *
-\*****************************************************************************/
-
+******************************************************************************/
 typedef enum {TAT,RT,CBT,THGT,WT,WTJQ} Metric;
-typedef enum {INFINITE,OMAP,BESTFIT,WORSTFIT,PAGING} MemoryPolicy;
+typedef enum {FREEHOLES, PARKING} MemoryQueue;
+typedef enum {INFINITE,OMAP,PAGING,BESTFIT,WORSTFIT} MemoryPolicy;
 
 
-/*****************************************************************************\
+/******************************************************************************
 *                             Global definitions                              *
-\*****************************************************************************/
+******************************************************************************/
 #define MAX_QUEUE_SIZE 10 
 #define FCFS            1 
 #define RR              3 
+#define MAXMETRICS      6
 
 
-#define MAXMETRICS      6 
-
-
-
-/*****************************************************************************\
+/******************************************************************************
 *                            Global data structures                           *
-\*****************************************************************************/
-typedef struct MemoryBlock {
-  struct MemoryBlock *previous;
-	struct MemoryBlock *next;
-  Memory size;
-  Memory top;
-	ProcessControlBlock *process;
-} MemoryBlock;
+******************************************************************************/
+typedef struct FreeMemoryHoleTag {
+  Memory       AddressFirstElement; // Address of first element 
+  Memory       Size;                // Size of the hole
+  struct FreeMemoryHoleTag *previous; /* previous element in linked list */
+  struct FreeMemoryHoleTag *next;     /* next element in linked list */
+} FreeMemoryHole;
 
-typedef struct MemoryBlockList {
-	MemoryBlock *Head;
-	MemoryBlock *Tail;
-} MemoryBlockList;
+typedef struct MemoryQueueParmsTag {
+  FreeMemoryHole *Head;
+  FreeMemoryHole *Tail;
+  Quantity       NumberOfHoles; // Number of Holes in the queue
+} MemoryQueueParms;
 
 
-
-/*****************************************************************************\
+/******************************************************************************
 *                                  Global data                                *
-\*****************************************************************************/
-
+******************************************************************************/
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
+MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
+MemoryPolicy memoryPolicy = PAGING;
+int pageSize;
+int pagesAvailable;
+MemoryQueueParms    MemoryQueues[2];
 
-MemoryBlockList MemoryBlocks;
-const MemoryPolicy policy = PAGING;
-const int PageSize = 256;
-int NumberOfAvailablePages;
-int NumberOfRequestedPages;
 
-/*****************************************************************************\
+/******************************************************************************
 *                               Function prototypes                           *
-\*****************************************************************************/
-
+******************************************************************************/
 void                 ManageProcesses(void);
 void                 NewJobIn(ProcessControlBlock whichProcess);
 void                 BookKeeping(void);
@@ -76,18 +69,15 @@ Flag                 ManagementInitialization(void);
 void                 LongtermScheduler(void);
 void                 IO();
 void                 CPUScheduler(Identifier whichPolicy);
-ProcessControlBlock *SRTF();
+ProcessControlBlock  *SRTF();
 void                 Dispatcher();
-Flag                 omap (ProcessControlBlock *currentProcess);
-Flag                 paging (ProcessControlBlock *currentProcess);
-Flag                 bestfit (ProcessControlBlock *currentProcess);
-Flag                 worstfit (ProcessControlBlock *currentProcess);
-Flag				         removeBlock(MemoryBlock *memoryBlock);
-void                 push(MemoryBlock *MemoryBlock);
+void                 EnqueueMemoryHole(MemoryQueue whichQueue, FreeMemoryHole *whichProcess);
+FreeMemoryHole       *DequeueMemoryHole(MemoryQueue whichQueue);
+Memory               getStartAddress(ProcessControlBlock *whichProcess);
 void                 compactMemory();
-void                 PrintMemoryBlocks();
 
-/*****************************************************************************\
+
+/******************************************************************************
 * function: main()                                                            *
 * usage:    Create an artificial environment operating systems. The parent    *
 *           process is the "Operating Systems" managing the processes using   *
@@ -98,20 +88,19 @@ void                 PrintMemoryBlocks();
 *                                                                             *
 * INITIALIZE PROGRAM ENVIRONMENT                                              *
 * START CONTROL ROUTINE                                                       *
-\*****************************************************************************/
-
+******************************************************************************/
 int main (int argc, char **argv) {
    if (Initialization(argc,argv)){
      ManageProcesses();
    }
 } /* end of main function */
 
-/***********************************************************************\
+
+/************************************************************************
 * Input : none                                                          *
 * Output: None                                                          *
 * Function: Monitor Sources and process events (written by students)    *
-\***********************************************************************/
-
+************************************************************************/
 void ManageProcesses(void){
   ManagementInitialization();
   while (1) {
@@ -121,7 +110,8 @@ void ManageProcesses(void){
   }
 }
 
-/***********************************************************************\
+
+/************************************************************************
 * Input : none                                                          *          
 * Output: None                                                          *        
 * Function:                                                             *
@@ -129,7 +119,7 @@ void ManageProcesses(void){
 *         otherwise (RR) return to rReady Queue                         *                           
 *    2) scan Waiting Queue to find processes with complete I/O          *
 *           and move them to Ready Queue                                *         
-\***********************************************************************/
+************************************************************************/
 void IO() {
   ProcessControlBlock *currentProcess = DequeueProcess(RUNNINGQUEUE); 
   if (currentProcess){
@@ -169,11 +159,12 @@ void IO() {
   } // if (ProcessToMove)
 }
 
-/***********************************************************************\    
- * Input : whichPolicy (1:FCFS, 2: SRTF, and 3:RR)                      *        
- * Output: None                                                         * 
- * Function: Selects Process from Ready Queue and Puts it on Running Q. *
-\***********************************************************************/
+
+/***********************************************************************
+* Input : whichPolicy (1:FCFS, 2: SRTF, and 3:RR)                      *       
+* Output: None                                                         *
+* Function: Selects Process from Ready Queue and Puts it on Running Q. *
+***********************************************************************/
 void CPUScheduler(Identifier whichPolicy) {
   ProcessControlBlock *selectedProcess;
   if ((whichPolicy == FCFS) || (whichPolicy == RR)) {
@@ -187,11 +178,12 @@ void CPUScheduler(Identifier whichPolicy) {
   }
 }
 
-/***********************************************************************\                         
- * Input : None                                                         *                                     
- * Output: Pointer to the process with shortest remaining time (SRTF)   *                                     
- * Function: Returns process control block with SRTF                    *                                     
-\***********************************************************************/
+
+/************************************************************************                        
+* Input : None                                                          *                                     
+* Output: Pointer to the process with shortest remaining time (SRTF)    *                                     
+* Function: Returns process control block with SRTF                     *                                     
+************************************************************************/
 ProcessControlBlock *SRTF() {
   /* Select Process with Shortest Remaining Time*/
   ProcessControlBlock *selectedProcess, *currentProcess = DequeueProcess(READYQUEUE);
@@ -218,6 +210,7 @@ ProcessControlBlock *SRTF() {
   return(selectedProcess);
 }
 
+
 /***********************************************************************\  
  * Input : None                                                         *   
  * Output: None                                                         *   
@@ -239,43 +232,42 @@ void Dispatcher() {
   
   if (processOnCPU->TimeInCpu >= processOnCPU-> TotalJobDuration) { // Process Complete
     printf(" >>>>>Process # %d complete, %d Processes Completed So Far <<<<<<\n",
-	  processOnCPU->ProcessID,NumberofJobs[THGT]);   
+	   processOnCPU->ProcessID,NumberofJobs[THGT]);   
     processOnCPU=DequeueProcess(RUNNINGQUEUE);
     EnqueueProcess(EXITQUEUE,processOnCPU);
-
-    if (policy == OMAP) {
-      AvailableMemory += processOnCPU->MemoryAllocated;
-      printf(" >> deallocated %u from %d, %u AvailableMemory\n", processOnCPU->MemoryAllocated, processOnCPU->ProcessID, AvailableMemory);
-      processOnCPU->MemoryAllocated = 0;
-    } else if (policy == BESTFIT || policy == WORSTFIT) {
-      // remove the process and free up the memory block
-      struct MemoryBlock *memoryBlock = MemoryBlocks.Head;
-      while(memoryBlock) {
-        if (memoryBlock->process && memoryBlock->process->ProcessID == processOnCPU->ProcessID) {
-          memoryBlock->process = NULL;
-          printf(" >> deallocated memory block from process %d\n", processOnCPU->ProcessID);
-          break;
-        }
-        memoryBlock = memoryBlock->next;
-      }
-    } else if (policy == PAGING) {
-      NumberOfRequestedPages = ceil((float)processOnCPU->MemoryRequested/PageSize);
-      printf(" >> deallocated %d pages from %d, %d frames available\n", NumberOfRequestedPages, processOnCPU->ProcessID, NumberOfAvailablePages);
-      NumberOfAvailablePages += NumberOfRequestedPages;
-    }
 
     NumberofJobs[THGT]++;
     NumberofJobs[TAT]++;
     NumberofJobs[WT]++;
     NumberofJobs[CBT]++;
-    SumMetrics[TAT]     += Now() - processOnCPU->JobArrivalTime;
-    SumMetrics[WT]      += processOnCPU->TimeInReadyQueue;
+    SumMetrics[TAT] += Now() - processOnCPU->JobArrivalTime;
+    SumMetrics[WT] += processOnCPU->TimeInReadyQueue;
 
-
+    if (memoryPolicy == OMAP) {
+      AvailableMemory += processOnCPU->MemoryAllocated;
+      printf(" >>>>>Deallocated %u bytes from process # %d, %u bytes available\n", 
+        processOnCPU->MemoryAllocated, processOnCPU->ProcessID, AvailableMemory);
+      processOnCPU->MemoryAllocated = 0;
+    }
+    else if (memoryPolicy == PAGING) {
+      int pagesRequested =  processOnCPU->MemoryRequested / pageSize;
+      printf(" >> Deallocated %d pages from process # %d, %d pages available\n", 
+        pagesRequested, processOnCPU->ProcessID, pagesAvailable);
+      pagesAvailable += pagesRequested;
+    }
+    else if (memoryPolicy == BESTFIT || memoryPolicy == WORSTFIT) {
+        FreeMemoryHole *newMemoryHole;
+        NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+        if (NewMemoryHole){ // malloc successful
+            if (processOnCPU->MemoryAllocated > 0) {
+                NewMemoryHole->AddressFirstElement = processOnCPU->TopOfMemory;
+                NewMemoryHole->Size = processOnCPU->MemoryAllocated;
+                EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
+            }
+        }
+    }
     // processOnCPU = DequeueProcess(EXITQUEUE);
     // XXX free(processOnCPU);
-
-    LongtermScheduler();
 
   } else { // Process still needs computing, out it on CPU
     TimePeriod CpuBurstTime = processOnCPU->CpuBurstTime;
@@ -283,7 +275,7 @@ void Dispatcher() {
     if (PolicyNumber == RR){
       CpuBurstTime = Quantum;
       if (processOnCPU->RemainingCpuBurstTime < Quantum)
-	CpuBurstTime = processOnCPU->RemainingCpuBurstTime;
+	      CpuBurstTime = processOnCPU->RemainingCpuBurstTime;
     }
     processOnCPU->RemainingCpuBurstTime -= CpuBurstTime;
     // SB_ 6/4 End Fixes RR 
@@ -337,7 +329,8 @@ void BookKeeping(void){
   if (NumberofJobs[WT] > 0){
     SumMetrics[WT] = SumMetrics[WT]/ (Average) NumberofJobs[WT];
   }
-  if (NumberofJobs[WTJQ] > 0){
+
+  if (NumberofJobs[WTJQ] > 0) {
     SumMetrics[WTJQ] = SumMetrics[WTJQ] / (Average) NumberofJobs[WTJQ];
   }
 
@@ -360,244 +353,243 @@ void BookKeeping(void){
 \***********************************************************************/
 void LongtermScheduler(void){
   ProcessControlBlock *currentProcess = DequeueProcess(JOBQUEUE);
-  Flag isSuccessful;
   while (currentProcess) {
-   switch(policy) {
-    case OMAP: isSuccessful = omap(currentProcess);
-      break;
-    case PAGING: isSuccessful = paging(currentProcess);
-      break;
-    case BESTFIT: isSuccessful = bestfit(currentProcess);
-      break;
-    case WORSTFIT: isSuccessful = worstfit(currentProcess);
-      break;
-    case INFINITE: isSuccessful = TRUE;
-      break;
-   }
-    if (isSuccessful) {
-      currentProcess->TimeInJobQueue = Now() - currentProcess->JobArrivalTime;
-      currentProcess->MemoryAllocated = currentProcess->MemoryRequested;
-      SumMetrics[WTJQ] += currentProcess->TimeInJobQueue;
+    if (getStartAddress(currentProcess) != -1) {
+      currentProcess->TimeInJobQueue = Now() - currentProcess->JobArrivalTime; // Set TimeInJobQueue
+      currentProcess->JobStartTime = Now(); // Set JobStartTime
+      SumMetrics[WTJQ] = currentProcess->TimeInJobQueue; // Record time in job queue
       NumberofJobs[WTJQ]++;
-      currentProcess->JobStartTime = Now();
-      EnqueueProcess(READYQUEUE, currentProcess);
-      currentProcess->state = READY;
+      EnqueueProcess(READYQUEUE,currentProcess); // Place process in Ready Queue
+      currentProcess->state = READY; // Update process state
       currentProcess = DequeueProcess(JOBQUEUE);
-    } else { // not enough memory, put it back and try again later
-      printf(">> not enough memory for process %d\n", currentProcess->ProcessID);
+    }
+    else {
       EnqueueProcess(JOBQUEUE, currentProcess);
       break;
     }
   }
 }
 
-Flag omap (ProcessControlBlock *currentProcess) {
-  if (AvailableMemory >= currentProcess->MemoryRequested ) {
-       AvailableMemory -= currentProcess->MemoryRequested;
-       currentProcess->MemoryAllocated = currentProcess->MemoryRequested;
-       printf(" >> allocated %u to %d, %u AvailableMemory\n", currentProcess->MemoryAllocated, currentProcess->ProcessID, AvailableMemory);
-       return TRUE;
-      } else { // not enough memory, put process back in job queue 
-        return FALSE;
-      }
-}
-
-
-
-Flag paging(ProcessControlBlock *currentProcess)  {
-  NumberOfRequestedPages = ceil((float) currentProcess->MemoryRequested/PageSize);
-  if (NumberOfAvailablePages >= NumberOfRequestedPages) {
-    NumberOfAvailablePages -= NumberOfRequestedPages;
-    return TRUE;
-  } else {
-    return FALSE;
-  }
- 
-}
-
-Flag bestfit (ProcessControlBlock *currentProcess) {
-   struct MemoryBlock* currentMemoryBlock = MemoryBlocks.Head;
-   struct MemoryBlock* selectedMemoryBlock;
-   Memory sizeOfSmallestBlock = UINT_MAX; // -1 is max unsigned int (11111111... in binary)
-   while (currentMemoryBlock) {
-      // select the minimum of the unoccupied blocks that are large enough to accomodate the new process 
-      if (!currentMemoryBlock->process && currentMemoryBlock->size >= currentProcess->MemoryRequested && currentMemoryBlock->size <= sizeOfSmallestBlock) {
-        selectedMemoryBlock = currentMemoryBlock;
-        sizeOfSmallestBlock = currentMemoryBlock->size;
-      }
-      currentMemoryBlock = currentMemoryBlock->next;
-    }
-    if (selectedMemoryBlock && selectedMemoryBlock->top + currentProcess->MemoryRequested < AvailableMemory) { // assign that process to the selected blocks
-      //create new block to contain the process
-      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
-      newBlock->process = currentProcess;
-      newBlock->top = selectedMemoryBlock->top;
-      newBlock->size = currentProcess->MemoryRequested;
-      printf(" >> Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
-      push(newBlock);
-      //shrink the previous block by process size
-      currentProcess->TopOfMemory = selectedMemoryBlock->top;
-
-      selectedMemoryBlock->top += currentProcess->MemoryRequested;
-
-      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
-      return TRUE;
-    } else { // no unoccupied blocks big enough
-      // compact memory and try again
-      compactMemory();
-      if (!MemoryBlocks.Tail->process && MemoryBlocks.Tail->size >= currentProcess->MemoryRequested) {
-        //create new block to contain the process
-      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
-      newBlock->process = currentProcess;
-      newBlock->top = selectedMemoryBlock->top;
-      newBlock->size = currentProcess->MemoryRequested;
-      printf(" >> COMPACTION SUCCESS! Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
-      push(newBlock);
-      //shrink free block by process size, remove it if 0
-      currentProcess->TopOfMemory = selectedMemoryBlock->top;
-      selectedMemoryBlock->top += currentProcess->MemoryRequested;
-      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
-      return TRUE;
-    }
-  }
-  return FALSE;
-}
-
-Flag worstfit(ProcessControlBlock *currentProcess) {
-  struct MemoryBlock* currentMemoryBlock = MemoryBlocks.Head;
-   struct MemoryBlock* selectedMemoryBlock;
-   Memory sizeOfBiggestBlock = 0;
-   while (currentMemoryBlock) {
-      // select the maximum of the blocks that are large enough to accomodate the new process 
-      if (!currentMemoryBlock->process && currentMemoryBlock->size >= currentProcess->MemoryRequested && currentMemoryBlock->size >= sizeOfBiggestBlock) {
-        selectedMemoryBlock = currentMemoryBlock;
-        sizeOfBiggestBlock = selectedMemoryBlock->size;
-      }
-      currentMemoryBlock = currentMemoryBlock->next;
-    }
-    if (selectedMemoryBlock && selectedMemoryBlock->top + currentProcess->MemoryRequested <= AvailableMemory) { // assign that process to the selected blocks
-      //create new block to contain the process
-      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
-      newBlock->process = currentProcess;
-      newBlock->top = selectedMemoryBlock->top;
-      newBlock->size = currentProcess->MemoryRequested;
-      printf(" >> Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
-      push(newBlock);
-      //shrink free block by process size, remove it if 0
-      currentProcess->TopOfMemory = selectedMemoryBlock->top;
-      selectedMemoryBlock->top += currentProcess->MemoryRequested;
-      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
-      return TRUE;
-    } else {
-      compactMemory();
-      if (!MemoryBlocks.Tail->process && MemoryBlocks.Tail->size >= currentProcess->MemoryRequested) {
-        //create new block to contain the process
-      struct MemoryBlock *newBlock = malloc(sizeof(MemoryBlock));
-      newBlock->process = currentProcess;
-      newBlock->top = selectedMemoryBlock->top;
-      newBlock->size = currentProcess->MemoryRequested;
-      printf(" >> COMPACTION SUCCESS! Allocating block at %u to process %d\n", newBlock->top, newBlock->process->ProcessID);
-      push(newBlock);
-      //shrink free block by process size, remove it if 0
-      currentProcess->TopOfMemory = selectedMemoryBlock->top;
-      selectedMemoryBlock->top += currentProcess->MemoryRequested;
-      selectedMemoryBlock->size -= currentProcess->MemoryRequested;
-      return TRUE;
-    } 
-  }
-  return FALSE;
-}
 
 /***********************************************************************\
 * Input : None                                                          *
 * Output: TRUE if Intialization successful                              *
 \***********************************************************************/
 Flag ManagementInitialization(void){
-  NumberOfAvailablePages = floor(AvailableMemory/PageSize); //AvailableMemory expressed as pages
   Metric m;
   for (m = TAT; m < MAXMETRICS; m++){
      NumberofJobs[m] = 0;
      SumMetrics[m]   = 0.0;
   }
-  // Initialize double-linked list of memory blocks
-  struct MemoryBlock* memory = malloc(sizeof(MemoryBlock));
-  memory->top = 0;
-  memory->size = AvailableMemory;
-  MemoryBlocks.Head = memory;
-  MemoryBlocks.Tail = memory;
-  PrintMemoryBlocks();
+
+  pageSize = 256;
+  pagesAvailable = AvailableMemory / pageSize;
+  printf("%uavmem, %upagesize, %upages\n", AvailableMemory, pageSize, pagesAvailable);
+
+  FreeMemoryHole *NewMemoryHole;
+  int i;
+  //Initialize the queues
+  for (i = 0; i < 2; i++){
+    MemoryQueues[i].Tail = (FreeMemoryHole *) NULL;
+    MemoryQueues[i].Head = (FreeMemoryHole *) NULL;
+    MemoryQueues[i].NumberOfHoles = 0;
+  }
+ 
+  // Create initial big memory holes containing the full memory
+  NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+  if (NewMemoryHole){ // malloc successful
+    NewMemoryHole->AddressFirstElement = 0;
+    NewMemoryHole->Size = MAXMEMORYSIZE;
+
+    // Move what was in the parking into the Queue of free holes
+    EnqueueMemoryHole(FREEHOLES,NewMemoryHole);
+
+    // Testing:
+    printf("Number of holes in Parking = %d\n",MemoryQueues[PARKING].NumberOfHoles);
+    if (MemoryQueues[PARKING].NumberOfHoles)
+      printf("Parking should be empty");
+
+                                                                                  
+    printf("Number of holes in Free Holes = %d\n",MemoryQueues[FREEHOLES].NumberOfHoles);
+    if (MemoryQueues[FREEHOLES].NumberOfHoles){
+      printf("Starting Address %d\n",MemoryQueues[FREEHOLES].Tail->AddressFirstElement);
+      printf("Size in hexadecimal 0x%x\n",MemoryQueues[FREEHOLES].Tail->Size);
+    }
+  }
+
+  return TRUE;
 }
 
-Flag removeBlock(MemoryBlock *memoryBlock) {
-	if (memoryBlock) { // null check on parameter
-		if (memoryBlock->previous) {
-			if (memoryBlock->next) { // handles case where memoryBlock is in between 2 others in the list
-				memoryBlock->previous->next = memoryBlock->next;
-				memoryBlock->next->previous = memoryBlock->previous;
-				return TRUE;
-			} else { // handles case where memoryBlock is at the back of the list
-				MemoryBlocks.Tail = memoryBlock->previous;
-				memoryBlock->previous->next = NULL;
-				return TRUE;
-			}
-		} else if (memoryBlock->next) { // handles case where memoryBlock is at the front of the list
-			MemoryBlocks.Head = memoryBlock->next;
-			memoryBlock->next->previous = NULL;
-			return TRUE;
-		} else {
-			return FALSE;
-		}
 
-	}
-	
+/************************************************************************                                            
+* Input : Pointer to process being allocated some memory                *                                            
+* Output: Returns address of allocated memory block                     *                                            
+* Function: Handles allocation of memory for a process                  *                                            
+************************************************************************/
+Memory getStartAddress(ProcessControlBlock *whichProcess) {
+  switch(memoryPolicy) {
+    case OMAP: 
+    {
+      if (AvailableMemory >= whichProcess->MemoryRequested ) {
+       AvailableMemory -= whichProcess->MemoryRequested;
+       whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
+       printf(" >>>>>Allocated %u bytes to %d, %u bytes available\n", 
+        whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory);
+       return 1;
+      } else { // not enough memory, put process back in job queue 
+        printf(" >>>>>Denied %u bytes to %d, %u bytes available\n", 
+        whichProcess->MemoryAllocated, whichProcess->ProcessID, AvailableMemory);
+        return -1;
+      }
+      break;
+    }
+
+    case PAGING: 
+    { 
+      int pagesRequested = whichProcess->MemoryRequested / pageSize;
+      if (pagesAvailable >= pagesRequested) {
+        pagesAvailable -= pagesRequested;
+        printf(" >>>>>Allocated %u pages to %d, %u pages available\n", 
+        pagesRequested, whichProcess->ProcessID, pagesAvailable);
+        return 1;
+      } 
+      else {
+        printf(" >>>>>Denied %u pages to %d, %u pages available\n", 
+        pagesRequested, whichProcess->ProcessID, pagesAvailable);
+        return -1;
+      }
+      break;
+    }
+
+    case BESTFIT: 
+    {
+        FreeMemoryHole *currentMemoryHole = DequeueMemoryHole(FREEHOLES);
+        FreeMemoryHole *selectedMemoryHole;
+        Memory sizeOfSmallestHole = UINT_MAX;
+        int i;
+        for (i = 0; i < MemoryQueues[FREEHOLES].NumberOfHoles; i++) {
+            if (currentMemoryHole->Size >= whichProcess->MemoryRequested && currentMemoryHole <= sizeOfSmallestHole) {
+                if (selectedMemoryHole) {
+                    EnqueueMemoryHole(FREEHOLES, selectedMemoryHole);
+                }
+                selectedMemoryHole = currentMemoryHole;
+                sizeOfSmallestHole = currentMemoryHole->Size;
+            }
+            currentMemoryHole = DequeueMemoryHole(FREEHOLES);
+        }
+        if(selectedMemoryHole) {
+            printf(" >> Allocating hole at %u to process %d\n", selectedMemoryHole->AddressFirstElement, whichProcess->ProcessID);
+            FreeMemoryHole *NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+            NewMemoryHole->AddressFirstElement = selectedMemoryHole->AddressFirstElement + whichProcess->MemoryRequested;
+            NewMemoryHole->Size = selectedMemoryHole->Size - whichProcess->MemoryRequested;
+            if (NewMemoryHole->Size > 0) {
+                EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
+            }
+            whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
+            whichProcess->TopOfMemory = selectedMemoryHole->AddressFirstElement;
+            return 1;
+        } else {
+            compactMemory();
+            selectedMemoryHole = DequeueMemoryHole(FREEHOLES);
+            if(selectedMemoryHole && selectedMemoryHole->Size >= whichProcess->MemoryRequested) {
+                printf(" >> Allocating hole at %u to process %d\n", selectedMemoryHole->AddressFirstElement, whichProcess->ProcessID);
+                FreeMemoryHole *NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+                NewMemoryHole->AddressFirstElement = selectedMemoryHole->AddressFirstElement + whichProcess->MemoryRequested;
+                NewMemoryHole->Size = selectedMemoryHole->Size - whichProcess->MemoryRequested;
+                if (NewMemoryHole->Size > 0) {
+                    EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
+                }
+            }
+            whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
+            whichProcess->TopOfMemory = selectedMemoryHole->AddressFirstElement;
+            return 1;
+        }
+        printf(" >>>>>Denied %u memory to %d\n", 
+        whichProcess->MemoryRequested, whichProcess->ProcessID);
+        whichProcess->MemoryAllocated = 0;
+        return -1;
+        break;
+    }
+
+    case WORSTFIT: 
+    {
+      // Insert code for worstfit
+      break;
+    }
+
+    case INFINITE:
+    {
+      return 1;
+      break;
+    }
+
+   }
+}
+
+
+/***********************************************************************\                                            
+ * Input : Queue where to enqueue and Element to enqueue                 *                                            
+ * Output: Updates Head and Tail as needed                               *                                            
+ * Function: Enqueues FIFO element in queue and updates tail and head    *                                            
+\***********************************************************************/
+void EnqueueMemoryHole(MemoryQueue whichQueue, FreeMemoryHole *whichMemoryHole){
+  if (whichMemoryHole == (FreeMemoryHole *) NULL) {
+    return;
+  }
+
+  MemoryQueues[whichQueue].NumberOfHoles++;
+
+  /* Enqueue the process in the queue */
+  if (MemoryQueues[whichQueue].Head)
+    MemoryQueues[whichQueue].Head->previous = whichMemoryHole;
+
+  whichMemoryHole->next = MemoryQueues[whichQueue].Head;
+  whichMemoryHole->previous = NULL;
+  MemoryQueues[whichQueue].Head = whichMemoryHole;
+
+  if (MemoryQueues[whichQueue].Tail == NULL)
+    MemoryQueues[whichQueue].Tail = whichMemoryHole;
+}
+
+
+/***********************************************************************\                                            
+ * Input : Queue where to enqueue and Element to enqueue                *                                            
+ * Output: Returns tail of queue                                        *                                            
+ * Function: Removes tail elelemnt and updates tail and head as needed  *                                            
+\***********************************************************************/
+FreeMemoryHole *DequeueMemoryHole(MemoryQueue whichQueue){
+  FreeMemoryHole *HoleToRemove;
+
+  HoleToRemove = MemoryQueues[whichQueue].Tail;
+  if (HoleToRemove != (FreeMemoryHole *) NULL) {
+    MemoryQueues[whichQueue].NumberOfHoles--;
+
+    HoleToRemove->next = (FreeMemoryHole *) NULL;
+    MemoryQueues[whichQueue].Tail = MemoryQueues[whichQueue].Tail->previous;
+
+    HoleToRemove->previous =(FreeMemoryHole *) NULL;
+    if (MemoryQueues[whichQueue].Tail == (FreeMemoryHole *) NULL){
+      MemoryQueues[whichQueue].Head = (FreeMemoryHole *) NULL;
+    } else {
+      MemoryQueues[whichQueue].Tail->next = (FreeMemoryHole *) NULL;
+    }
+  }
+
+  return(HoleToRemove);
 }
 
 void compactMemory() {
-  printf("!! PERFORMING COMPACTION !!\n");
-  struct MemoryBlock *memoryBlock = MemoryBlocks.Head;
-  Memory sizeOfNewBlock = 0;
-  Memory addressOfNewBlock = 0;
-  int count = 0;
-  while (memoryBlock) { // iterate through all memory blocks
-    if (memoryBlock->process == NULL) { // remove unoccupied blocks and 
-      sizeOfNewBlock += memoryBlock->size;
-      removeBlock(memoryBlock);
-      count++;
-    } else {
-      memoryBlock->process->TopOfMemory = addressOfNewBlock;
-      addressOfNewBlock += memoryBlock->process->MemoryAllocated;
+    printf("!! PERFORMING COMPACTION !!\n");
+    FreeMemoryHole *newMemoryHole = DequeueMemoryHole(FREEHOLES);
+    FreeMemoryHole *currentMemoryHole;
+    int i = 0;
+    for (i = 0; i < MemoryQueues[FREEHOLES].NumberOfHoles; i++) {
+        currentMemoryHole = DequeueMemoryHole(FREEHOLES);
+        newMemoryHole->Size += currentMemoryHole->Size;
     }
-    memoryBlock = memoryBlock->next;
-  }
-  if (sizeOfNewBlock > 0) {
-    struct MemoryBlock *newFreeBlock = malloc(sizeof(MemoryBlock));
-    newFreeBlock->size = sizeOfNewBlock;
-    newFreeBlock->top = addressOfNewBlock;
-    push(newFreeBlock);
-    printf("!! COMPACTED %d MEMORY BLOCKS FOR %d BYTES !!\n", count, sizeOfNewBlock);
-    PrintMemoryBlocks();
-  }
-}
-
-void push(MemoryBlock *memoryBlock) {
-  memoryBlock->previous = MemoryBlocks.Tail;
-  memoryBlock->previous->next = memoryBlock;
-  memoryBlock->next = NULL;
-  MemoryBlocks.Tail = memoryBlock;
-}
-
-
-void PrintMemoryBlocks() {
-  printf(">>>>>>>>>> MEMORY BLOCKS <<<<<<<<<<<<<\n");
-  struct MemoryBlock* temp = MemoryBlocks.Head;
-  while (temp) {
-    if (temp->process) {
-      printf("Block occupied by process %d at address %u\n",temp->process->ProcessID, temp->process->TopOfMemory);
-    } else {
-      printf("Unoccupied block location: %u Block size: %u\n",temp->top, temp->size);
+    if (newMemoryHole->Size > 0) {
+        newMemoryHole->AddressFirstElement = 0;
+        EnqueueMemoryHole(FREEHOLES, newMemoryHole);
+        printf("!! COMPACTED %d MEMORY HOLES FOR %d BYTES !!\n", MemoryQueues[FREEHOLES].NumberOfHoles, newMemoryHole->Size);
     }
-    temp = temp->next;
-  }
-
-  printf(">>>>>>>>>> END MEMORY BLOCKS <<<<<<<<<<<<<\n");
 }
