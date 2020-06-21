@@ -446,6 +446,9 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
     case PAGING: 
     { 
       int pagesRequested = whichProcess->MemoryRequested / pageSize;
+      if (pagesRequested == 0) {
+        pagesRequested++;
+      }
       if (pagesAvailable >= pagesRequested) {
         pagesAvailable -= pagesRequested;
         printf(" >>>>>Allocated %u pages to %d, %u pages available\n", 
