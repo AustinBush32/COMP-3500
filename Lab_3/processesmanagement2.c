@@ -1,3 +1,4 @@
+#include <math.h>
 /******************************************************************************
 * Laboratory Exercises COMP 3500                                              *
 * Author: Saad Biaz                                                           *
@@ -53,7 +54,7 @@ typedef struct MemoryQueueParmsTag {
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
-MemoryPolicy memoryPolicy = BESTFIT;
+MemoryPolicy memoryPolicy = PAGING;
 int pageSize;
 int pagesAvailable;
 
@@ -237,13 +238,10 @@ void Dispatcher() {
       processOnCPU->MemoryAllocated = 0;
     }
     else if (memoryPolicy == PAGING) {
-      int pagesRequested =  processOnCPU->MemoryRequested / pageSize;
-      if (pagesRequested == 0) {
-        pagesRequested++;
-      }
+      int pages = processOnCPU->MemoryAllocated / pageSize;
       printf(" >> Deallocated %d pages from process # %d, %d pages available\n", 
-        pagesRequested, processOnCPU->ProcessID, pagesAvailable);
-      pagesAvailable += pagesRequested;
+        pages, processOnCPU->ProcessID, pagesAvailable);
+      pagesAvailable += pages;
     }
     else if (memoryPolicy == BESTFIT || memoryPolicy == WORSTFIT) {
         FreeMemoryHole *memoryHole;
@@ -448,14 +446,12 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
 
     case PAGING: 
     { 
-      int pagesRequested = whichProcess->MemoryRequested / pageSize;
-      if (pagesRequested == 0) {
-        pagesRequested++;
-      }
+      int pagesRequested = (int) ceil((double) whichProcess->MemoryRequested / (double) pageSize);
       if (pagesAvailable >= pagesRequested) {
         pagesAvailable -= pagesRequested;
         printf(" >>>>>Allocated %u pages to %d, %u pages available\n", 
         pagesRequested, whichProcess->ProcessID, pagesAvailable);
+        whichProcess->MemoryAllocated = pagesRequested * pageSize;
         return 1;
       } 
       else {
