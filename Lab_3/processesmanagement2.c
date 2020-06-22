@@ -53,7 +53,7 @@ typedef struct MemoryQueueParmsTag {
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
-MemoryPolicy memoryPolicy = PAGING;
+MemoryPolicy memoryPolicy = BESTFIT;
 int pageSize;
 int pagesAvailable;
 
@@ -230,18 +230,6 @@ void Dispatcher() {
   }
   
   if (processOnCPU->TimeInCpu >= processOnCPU-> TotalJobDuration) { // Process Complete
-    printf(" >>>>>Process # %d complete, %d Processes Completed So Far <<<<<<\n",
-	   processOnCPU->ProcessID,NumberofJobs[THGT]);   
-    processOnCPU=DequeueProcess(RUNNINGQUEUE);
-    EnqueueProcess(EXITQUEUE,processOnCPU);
-
-    NumberofJobs[THGT]++;
-    NumberofJobs[TAT]++;
-    NumberofJobs[WT]++;
-    NumberofJobs[CBT]++;
-    SumMetrics[TAT] += Now() - processOnCPU->JobArrivalTime;
-    SumMetrics[WT] += processOnCPU->TimeInReadyQueue;
-
     if (memoryPolicy == OMAP) {
       AvailableMemory += processOnCPU->MemoryAllocated;
       printf(" >>>>>Deallocated %u bytes from process # %d, %u bytes available\n", 
@@ -258,16 +246,28 @@ void Dispatcher() {
       pagesAvailable += pagesRequested;
     }
     else if (memoryPolicy == BESTFIT || memoryPolicy == WORSTFIT) {
-        FreeMemoryHole *newMemoryHole;
-        newMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
-        if (newMemoryHole){ // malloc successful
-            if (processOnCPU->MemoryAllocated > 0) {
-                newMemoryHole->AddressFirstElement = processOnCPU->TopOfMemory;
-                newMemoryHole->Size = processOnCPU->MemoryAllocated;
-                EnqueueMemoryHole(FREEHOLES, newMemoryHole);
-            }
+        FreeMemoryHole *memoryHole;
+        memoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+        if (memoryHole){ // malloc successful
+          memoryHole->AddressFirstElement = processOnCPU->TopOfMemory;
+          memoryHole->Size = processOnCPU->MemoryAllocated;
+          printf("freed hole of size %d\n", memoryHole->Size);
+          EnqueueMemoryHole(FREEHOLES, memoryHole);
         }
     }
+
+    printf(" >>>>>Process # %d complete, %d Processes Completed So Far <<<<<<\n",
+	   processOnCPU->ProcessID,NumberofJobs[THGT]);   
+    processOnCPU=DequeueProcess(RUNNINGQUEUE);
+    EnqueueProcess(EXITQUEUE,processOnCPU);
+
+    NumberofJobs[THGT]++;
+    NumberofJobs[TAT]++;
+    NumberofJobs[WT]++;
+    NumberofJobs[CBT]++;
+    SumMetrics[TAT] += Now() - processOnCPU->JobArrivalTime;
+    SumMetrics[WT] += processOnCPU->TimeInReadyQueue;
+
     // processOnCPU = DequeueProcess(EXITQUEUE);
     // XXX free(processOnCPU);
 
@@ -500,21 +500,22 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
           compactMemory();
           selectedMemoryHole = DequeueMemoryHole(FREEHOLES);
           if(selectedMemoryHole && selectedMemoryHole->Size >= whichProcess->MemoryRequested) {
-              printf(" >> Allocating hole at %u to process %d\n", selectedMemoryHole->AddressFirstElement, whichProcess->ProcessID);
-              FreeMemoryHole *NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
-              NewMemoryHole->AddressFirstElement = selectedMemoryHole->AddressFirstElement + whichProcess->MemoryRequested;
-              NewMemoryHole->Size = selectedMemoryHole->Size - whichProcess->MemoryRequested;
-              if (NewMemoryHole->Size > 0) {
-                  EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
-              }
+            printf(" >> Allocating hole at %u to process %d\n", selectedMemoryHole->AddressFirstElement, whichProcess->ProcessID);
+            FreeMemoryHole *NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+            NewMemoryHole->AddressFirstElement = selectedMemoryHole->AddressFirstElement + whichProcess->MemoryRequested;
+            NewMemoryHole->Size = selectedMemoryHole->Size - whichProcess->MemoryRequested;
+            if (NewMemoryHole->Size > 0) {
+                EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
+            }
+            whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
+            whichProcess->TopOfMemory = selectedMemoryHole->AddressFirstElement;
+            return 1;
+          }  else {
+            EnqueueMemoryHole(FREEHOLES, selectedMemoryHole);
           }
-          whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
-          whichProcess->TopOfMemory = selectedMemoryHole->AddressFirstElement;
-          return 1;
       }
       printf(" >>>>>Denied %u memory to %d\n", 
       whichProcess->MemoryRequested, whichProcess->ProcessID);
-      whichProcess->MemoryAllocated = 0;
       return -1;
       break;
     }
@@ -552,21 +553,22 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
           compactMemory();
           selectedMemoryHole = DequeueMemoryHole(FREEHOLES);
           if(selectedMemoryHole && selectedMemoryHole->Size >= whichProcess->MemoryRequested) {
-              printf(" >> Allocating hole at %u to process %d\n", selectedMemoryHole->AddressFirstElement, whichProcess->ProcessID);
-              FreeMemoryHole *NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
-              NewMemoryHole->AddressFirstElement = selectedMemoryHole->AddressFirstElement + whichProcess->MemoryRequested;
-              NewMemoryHole->Size = selectedMemoryHole->Size - whichProcess->MemoryRequested;
-              if (NewMemoryHole->Size > 0) {
-                  EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
-              }
+            printf(" >> Allocating hole at %u to process %d\n", selectedMemoryHole->AddressFirstElement, whichProcess->ProcessID);
+            FreeMemoryHole *NewMemoryHole = (FreeMemoryHole *) malloc(sizeof(FreeMemoryHole));
+            NewMemoryHole->AddressFirstElement = selectedMemoryHole->AddressFirstElement + whichProcess->MemoryRequested;
+            NewMemoryHole->Size = selectedMemoryHole->Size - whichProcess->MemoryRequested;
+            if (NewMemoryHole->Size > 0) {
+                EnqueueMemoryHole(FREEHOLES, NewMemoryHole);
+            }
+            whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
+            whichProcess->TopOfMemory = selectedMemoryHole->AddressFirstElement;
+            return 1;
+          } else {
+            EnqueueMemoryHole(FREEHOLES, selectedMemoryHole);
           }
-          whichProcess->MemoryAllocated = whichProcess->MemoryRequested;
-          whichProcess->TopOfMemory = selectedMemoryHole->AddressFirstElement;
-          return 1;
       }
       printf(" >>>>>Denied %u memory to %d\n", 
       whichProcess->MemoryRequested, whichProcess->ProcessID);
-      whichProcess->MemoryAllocated = 0;
       return -1;
       break;
     break;
@@ -636,15 +638,17 @@ FreeMemoryHole *DequeueMemoryHole(MemoryQueue whichQueue){
 void compactMemory() {
     printf("!! PERFORMING COMPACTION !!\n");
     FreeMemoryHole *newMemoryHole = DequeueMemoryHole(FREEHOLES);
-    FreeMemoryHole *currentMemoryHole;
+    FreeMemoryHole *currentMemoryHole = (FreeMemoryHole *) NULL;;
     int i = 0;
     for (i = 0; i < MemoryQueues[FREEHOLES].NumberOfHoles; i++) {
         currentMemoryHole = DequeueMemoryHole(FREEHOLES);
         newMemoryHole->Size += currentMemoryHole->Size;
     }
-    if (newMemoryHole->Size > 0) {
+    if (newMemoryHole) {
         newMemoryHole->AddressFirstElement = 0;
         EnqueueMemoryHole(FREEHOLES, newMemoryHole);
         printf("!! COMPACTED %d MEMORY HOLES FOR %d BYTES !!\n", MemoryQueues[FREEHOLES].NumberOfHoles, newMemoryHole->Size);
+    } else {
+      printf("!! NO HOLES TO COMPACT !!\n");
     }
 }
