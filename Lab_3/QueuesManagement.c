@@ -28,8 +28,8 @@ typedef enum {FREEHOLES, PARKING} MemoryQueue;
 *                            Global data structures                           *
 \*****************************************************************************/
 typedef struct FreeMemoryHoleTag{
-  Memory       AddressFirstElement; // Address of first element 
-  Memory       Size;                // Size of the hole
+  Memory AddressFirstElement; // Address of first element 
+  Memory Size;                // Size of the hole
   struct FreeMemoryHoleTag *previous; /* previous element in linked list */
   struct FreeMemoryHoleTag *next;     /* next element in linked list */
 } FreeMemoryHole;
@@ -37,7 +37,7 @@ typedef struct FreeMemoryHoleTag{
 typedef struct MemoryQueueParmsTag{
   FreeMemoryHole *Head;
   FreeMemoryHole *Tail;
-  Quantity       NumberOfHoles; // Number of Holes in the queue
+  Quantity NumberOfHoles; // Number of Holes in the queue
 } MemoryQueueParms;
 
 
@@ -111,21 +111,21 @@ int main (int argc, char **argv) {
  * Output: Updates Head and Tail as needed                               *                                            
  * Function: Enqueues FIFO element in queue and updates tail and head    *                                            
 \***********************************************************************/
-void                 EnqueueMemoryHole(MemoryQueue whichQueue,
-                                    FreeMemoryHole *whichMemoryHole){
+void EnqueueMemoryHole(MemoryQueue whichQueue, FreeMemoryHole *whichMemoryHole){
   if (whichMemoryHole == (FreeMemoryHole *) NULL) {
-    // printf("Tried to enqueue a null pointer in the %s \n",QueuesNames[whichQueue]);                               
-    return;;
+    return;
   }
 
   MemoryQueues[whichQueue].NumberOfHoles++;
 
   /* Enqueue the process in the queue */
   if (MemoryQueues[whichQueue].Head)
-    MemoryQueues[whichQueue].Head->previous   = whichMemoryHole;
-  whichMemoryHole->next      = MemoryQueues[whichQueue].Head;
-  whichMemoryHole->previous  = NULL;
+    MemoryQueues[whichQueue].Head->previous = whichMemoryHole;
+
+  whichMemoryHole->next = MemoryQueues[whichQueue].Head;
+  whichMemoryHole->previous = NULL;
   MemoryQueues[whichQueue].Head = whichMemoryHole;
+
   if (MemoryQueues[whichQueue].Tail == NULL)
     MemoryQueues[whichQueue].Tail = whichMemoryHole;
 }

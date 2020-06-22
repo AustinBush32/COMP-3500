@@ -53,7 +53,7 @@ typedef struct MemoryQueueParmsTag {
 Quantity NumberofJobs[MAXMETRICS]; // Number of Jobs for which metric was collected
 Average  SumMetrics[MAXMETRICS]; // Sum for each Metrics
 MemoryQueueParms MemoryQueues[2]; // Free Holes and Parking
-MemoryPolicy memoryPolicy = BESTFIT;
+MemoryPolicy memoryPolicy = PAGING;
 int pageSize;
 int pagesAvailable;
 
@@ -250,6 +250,9 @@ void Dispatcher() {
     }
     else if (memoryPolicy == PAGING) {
       int pagesRequested =  processOnCPU->MemoryRequested / pageSize;
+      if (pagesRequested == 0) {
+        pagesRequested++;
+      }
       printf(" >> Deallocated %d pages from process # %d, %d pages available\n", 
         pagesRequested, processOnCPU->ProcessID, pagesAvailable);
       pagesAvailable += pagesRequested;
@@ -381,7 +384,7 @@ Flag ManagementInitialization(void){
      SumMetrics[m]   = 0.0;
   }
 
-  pageSize = 256;
+  pageSize = 8192;
   pagesAvailable = AvailableMemory / pageSize;
   printf("%uavmem, %upagesize, %upages\n", AvailableMemory, pageSize, pagesAvailable);
 
@@ -446,6 +449,9 @@ Memory getStartAddress(ProcessControlBlock *whichProcess) {
     case PAGING: 
     { 
       int pagesRequested = whichProcess->MemoryRequested / pageSize;
+      if (pagesRequested == 0) {
+        pagesRequested++;
+      }
       if (pagesAvailable >= pagesRequested) {
         pagesAvailable -= pagesRequested;
         printf(" >>>>>Allocated %u pages to %d, %u pages available\n", 
